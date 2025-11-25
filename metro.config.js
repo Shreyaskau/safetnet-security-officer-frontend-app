@@ -1,0 +1,56 @@
+const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
+const path = require('path');
+
+/**
+ * Metro configuration
+ * https://facebook.github.io/metro/docs/configuration
+ *
+ * @type {import('metro-config').MetroConfig}
+ */
+const defaultConfig = getDefaultConfig(__dirname);
+
+const config = {
+  transformer: {
+    ...defaultConfig.transformer,
+    getTransformOptions: async () => ({
+      transform: {
+        experimentalImportSupport: false,
+        inlineRequires: true,
+      },
+    }),
+  },
+  resolver: {
+    ...defaultConfig.resolver,
+    alias: {
+      ...defaultConfig.resolver.alias,
+      'react-native-reanimated': path.resolve(__dirname, 'src/utils/reanimatedMock.js'),
+    },
+    extraNodeModules: {
+      ...defaultConfig.resolver.extraNodeModules,
+      'react-native-reanimated': path.resolve(__dirname, 'src/utils/reanimatedMock.js'),
+      // Provide Node.js built-in modules for react-native-dotenv (Babel plugin)
+      path: require.resolve('path-browserify'),
+      os: require.resolve('os-browserify/browser'),
+      crypto: require.resolve('crypto-browserify'),
+      stream: require.resolve('stream-browserify'),
+      events: require.resolve('events'),
+      fs: false, // fs is not available in React Native, but dotenv should handle this
+    },
+  },
+};
+
+module.exports = mergeConfig(defaultConfig, config);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
