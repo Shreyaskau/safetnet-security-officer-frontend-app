@@ -1,6 +1,22 @@
 module.exports = {
-  presets: ['module:metro-react-native-babel-preset'],
+  presets: ['module:@react-native/babel-preset'],
   plugins: [
-    '@babel/plugin-proposal-optional-chaining'
+    [
+      'module:react-native-dotenv',
+      {
+        moduleName: '@env',
+        path: '.env',
+        blacklist: null,
+        whitelist: null,
+        safe: false,
+        allowUndefined: true,
+      },
+    ],
+    // Explicitly enable optional chaining and nullish coalescing transpilation
+    '@babel/plugin-proposal-optional-chaining',
+    '@babel/plugin-proposal-nullish-coalescing-operator',
+    // Reanimated disabled - using mock instead due to build issues
+    // 'react-native-reanimated/plugin',
   ],
 };
+

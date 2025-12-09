@@ -1,23 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { colors, typography, spacing } from '../../utils';
-
-// Icon mapping function to replace Material Icons with emojis
-const getIconEmoji = (iconName: string | undefined): string => {
-  if (!iconName) {
-    return '📋';
-  }
-  const iconMap: { [key: string]: string } = {
-    'dashboard': '📊',
-    'notifications-none': '🔔',
-    'notifications': '🔔',
-    'description': '📄',
-    'person-outline': '👤',
-    'person': '👤',
-  };
-  return iconMap[iconName] || '📋';
-};
 
 interface TabItem {
   name: string;
@@ -89,9 +74,12 @@ export const BottomTabNavigator = () => {
             onPress={() => handleTabPress(tab.name)}
             activeOpacity={0.7}
           >
-            <Text style={[styles.icon, { color: isActive ? colors.primary : colors.lightText }]}>
-              {getIconEmoji((isActive && tab.activeIcon) ? tab.activeIcon : tab.icon)}
-            </Text>
+            <Icon
+              name={(isActive && tab.activeIcon) ? tab.activeIcon : tab.icon}
+              size={24}
+              color={isActive ? colors.primary : colors.lightText}
+              style={styles.icon}
+            />
             <Text style={[styles.label, isActive && styles.activeLabel]}>
               {tab.label}
             </Text>
@@ -125,9 +113,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   icon: {
-    fontSize: 24,
     marginBottom: spacing.xs,
-    textAlign: 'center',
   },
   label: {
     ...typography.caption,

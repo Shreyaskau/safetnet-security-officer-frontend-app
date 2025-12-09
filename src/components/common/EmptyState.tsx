@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { colors, typography, spacing } from '../../utils';
 
 interface EmptyStateProps {
@@ -20,7 +21,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   return (
     <View style={styles.container}>
       {typeof icon === 'string' ? (
-        <Text style={styles.icon}>{icon}</Text>
+        <Icon name={icon} size={80} color={colors.mediumGray} style={styles.icon} />
       ) : (
         icon
       )}
@@ -43,7 +44,6 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   icon: {
-    fontSize: 80,
     marginBottom: spacing.lg,
   },
   title: {

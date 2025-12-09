@@ -9,29 +9,9 @@ import {
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { DrawerActions } from '@react-navigation/native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAppSelector } from '../redux/hooks';
 import { colors } from '../utils';
-
-// Icon mapping function to replace Material Icons with emojis
-const getIconEmoji = (iconName: string | undefined): string => {
-  if (!iconName) {
-    return '📋';
-  }
-  const iconMap: { [key: string]: string } = {
-    'dashboard': '📊',
-    'person-outline': '👤',
-    'person': '👤',
-    'description': '📄',
-    'map': '🗺️',
-    'send': '📤',
-    'bar-chart': '📊',
-    'share': '🔗',
-    'settings': '⚙️',
-    'help-outline': '💡',
-    'help': '💡',
-  };
-  return iconMap[iconName] || '📋';
-};
 
 export const CustomDrawer = (props: DrawerContentComponentProps) => {
   const officer = useAppSelector((state) => state.auth.officer);
@@ -176,7 +156,7 @@ export const CustomDrawer = (props: DrawerContentComponentProps) => {
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.closeButtonText}>✕</Text>
+            <Icon name="close" size={20} color={colors.darkText} />
           </TouchableOpacity>
           <View style={styles.profileImageContainer}>
             {officer && officer.user_image ? (
@@ -211,9 +191,12 @@ export const CustomDrawer = (props: DrawerContentComponentProps) => {
                 onPress={item.onPress}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.menuIcon, { color: isActive ? colors.primary : colors.darkText }]}>
-                  {getIconEmoji((isActive && item.activeIcon) ? item.activeIcon : item.icon)}
-                </Text>
+                <Icon
+                  name={(isActive && item.activeIcon) ? item.activeIcon : item.icon}
+                  size={24}
+                  color={isActive ? colors.primary : colors.darkText}
+                  style={styles.menuIcon}
+                />
                 <Text
                   style={[styles.menuLabel, isActive && styles.menuLabelActive]}
                 >
@@ -242,9 +225,12 @@ export const CustomDrawer = (props: DrawerContentComponentProps) => {
                 onPress={item.onPress}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.menuIcon, { color: isActive ? colors.primary : colors.darkText }]}>
-                  {getIconEmoji((isActive && item.activeIcon) ? item.activeIcon : item.icon)}
-                </Text>
+                <Icon
+                  name={(isActive && item.activeIcon) ? item.activeIcon : item.icon}
+                  size={24}
+                  color={isActive ? colors.primary : colors.darkText}
+                  style={styles.menuIcon}
+                />
                 <Text
                   style={[styles.menuLabel, isActive && styles.menuLabelActive]}
                 >
@@ -269,7 +255,7 @@ export const CustomDrawer = (props: DrawerContentComponentProps) => {
       {/* Bottom Section */}
       <View style={styles.bottomSection}>
         <View style={styles.appInfo}>
-          <Text style={styles.appLogo}>🛡️</Text>
+          <Icon name="security" size={32} color={colors.primary} style={styles.appLogo} />
           <View>
             <Text style={styles.appName}>SafeTNet Security</Text>
             <Text style={styles.appVersion}>v2.2.0</Text>
@@ -387,11 +373,14 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.primary,
   },
   menuIcon: {
-    fontSize: 24,
     width: 24,
     height: 24,
     marginRight: 16,
-    textAlign: 'center',
+  },
+  appLogo: {
+    width: 32,
+    height: 32,
+    marginRight: 12,
   },
   menuLabel: {
     flex: 1,
@@ -433,12 +422,6 @@ const styles = StyleSheet.create({
   appInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  appLogo: {
-    width: 32,
-    height: 32,
-    marginRight: 12,
-    fontSize: 32,
   },
   appName: {
     fontSize: 14,

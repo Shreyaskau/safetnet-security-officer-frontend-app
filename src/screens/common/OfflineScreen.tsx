@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Button } from '../../components/common/Button';
 import { colors, typography, spacing } from '../../utils';
 
@@ -15,8 +16,10 @@ export const OfflineScreen = ({ navigation, route }: any) => {
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconContainer}>
-          <Text style={styles.wifiIcon}>📶</Text>
-          <Text style={styles.xIcon}>✕</Text>
+          <Icon name="wifi-off" size={100} color={colors.mediumGray} />
+          <View style={styles.xIconContainer}>
+            <Icon name="close" size={60} color={colors.emergencyRed} />
+          </View>
         </View>
 
         <Text style={styles.title}>You're Offline</Text>
@@ -50,7 +53,7 @@ export const OfflineScreen = ({ navigation, route }: any) => {
           onPress={onRetry}
           variant="primary"
           style={styles.retryButton}
-          icon={<Text style={styles.retryIcon}>🔄</Text>}
+          icon={<Icon name="refresh" size={18} color={colors.white} />}
         />
 
         {onHelp && (
@@ -79,17 +82,10 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: spacing.lg,
   },
-  wifiIcon: {
-    fontSize: 100,
-    color: colors.mediumGray,
-  },
-  xIcon: {
+  xIconContainer: {
     position: 'absolute',
     top: '30%',
     left: '30%',
-    fontSize: 60,
-    color: colors.emergencyRed,
-    fontWeight: 'bold',
   },
   title: {
     ...typography.screenHeader,
@@ -150,9 +146,6 @@ const styles = StyleSheet.create({
   retryButton: {
     width: '100%',
     marginBottom: spacing.md,
-  },
-  retryIcon: {
-    fontSize: 18,
   },
   helpLink: {
     paddingVertical: spacing.sm,

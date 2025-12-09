@@ -1,5 +1,6 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, StyleSheet } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { colors, spacing } from '../../utils';
 
 interface FloatingActionButtonProps {
@@ -10,7 +11,7 @@ interface FloatingActionButtonProps {
 
 export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
   onPress,
-  icon = '+',
+  icon = 'add',
   size = 56,
 }) => {
   return (
@@ -26,7 +27,7 @@ export const FloatingActionButton: React.FC<FloatingActionButtonProps> = ({
       onPress={onPress}
       activeOpacity={0.8}
     >
-      <Text style={[styles.icon, { fontSize: size * 0.4 }]}>{icon}</Text>
+      <Icon name={icon} size={size * 0.4} color={colors.white} />
     </TouchableOpacity>
   );
 };
@@ -44,10 +45,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-  },
-  icon: {
-    color: colors.white,
-    fontWeight: 'bold',
   },
 });
 

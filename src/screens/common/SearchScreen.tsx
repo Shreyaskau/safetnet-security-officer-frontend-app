@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   FlatList,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { EmptyState } from '../../components/common/EmptyState';
 import { AlertCard } from '../../components/alerts/AlertCard';
 import { colors, typography, spacing } from '../../utils';
@@ -38,11 +39,11 @@ export const SearchScreen = ({ navigation }: any) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+          <Icon name="arrow-back" size={24} color={colors.darkText} />
         </TouchableOpacity>
         <Text style={styles.title}>Search</Text>
         <TouchableOpacity>
-          <Text style={styles.menuIcon}>⋮</Text>
+          <Icon name="more-vert" size={24} color={colors.darkText} />
         </TouchableOpacity>
       </View>
 
@@ -53,7 +54,7 @@ export const SearchScreen = ({ navigation }: any) => {
       )}
 
       <View style={styles.searchContainer}>
-        <Text style={styles.searchIcon}>🔍</Text>
+        <Icon name="search" size={20} color={colors.mediumGray} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search alerts, users, locations..."
@@ -64,7 +65,7 @@ export const SearchScreen = ({ navigation }: any) => {
         />
         {searchQuery.length > 0 && (
           <TouchableOpacity onPress={() => handleSearch('')}>
-            <Text style={styles.clearIcon}>✕</Text>
+            <Icon name="close" size={18} color={colors.mediumGray} />
           </TouchableOpacity>
         )}
       </View>
@@ -79,7 +80,7 @@ export const SearchScreen = ({ navigation }: any) => {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <EmptyState
-              icon="🔍"
+              icon="search"
               title="No Results Found"
               description="Try adjusting your search filters"
             />
@@ -88,7 +89,7 @@ export const SearchScreen = ({ navigation }: any) => {
       ) : (
         <View style={styles.emptyContainer}>
           <EmptyState
-            icon="🔍"
+            icon="search"
             title="Search Alerts"
             description="Search for alerts, users, or locations"
           />
@@ -113,16 +114,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.borderGray,
   },
-  backIcon: {
-    fontSize: 24,
-    color: colors.darkText,
-  },
   title: {
     ...typography.sectionHeader,
-  },
-  menuIcon: {
-    fontSize: 24,
-    color: colors.darkText,
   },
   subtitle: {
     ...typography.caption,
@@ -143,19 +136,12 @@ const styles = StyleSheet.create({
     borderColor: colors.borderGray,
   },
   searchIcon: {
-    fontSize: 20,
     marginRight: spacing.sm,
-    color: colors.mediumGray,
   },
   searchInput: {
     flex: 1,
     ...typography.body,
     paddingVertical: spacing.md,
-  },
-  clearIcon: {
-    fontSize: 18,
-    color: colors.mediumGray,
-    padding: spacing.xs,
   },
   list: {
     padding: spacing.base,
