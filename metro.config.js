@@ -18,6 +18,8 @@ const config = {
         inlineRequires: true,
       },
     }),
+    // Ensure all node_modules are transpiled (including optional chaining)
+    unstable_allowRequireContext: true,
   },
   resolver: {
     ...defaultConfig.resolver,
@@ -36,7 +38,16 @@ const config = {
       events: require.resolve('events'),
       fs: false, // fs is not available in React Native, but dotenv should handle this
     },
+    blockList: [
+      /TempWrapperProject\/.*/,
+      /test_backend_connectivity\.js$/,
+      /\.test\.js$/,
+      /\.spec\.js$/,
+    ],
   },
+  watchFolders: [
+    path.resolve(__dirname),
+  ],
 };
 
 module.exports = mergeConfig(defaultConfig, config);

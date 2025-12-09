@@ -1,0 +1,89 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+react {
+    /* You can customize React Native configuration here if needed. */
+}
+
+// Reanimated removed - compatibility issues with RN 0.73.2
+// project.ext {
+//     reanimated = [
+//         buildFromSource: true
+//     ]
+// }
+
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == "androidx.core" &&
+                (details.requested.name == "core" || details.requested.name == "core-ktx")) {
+            details.useVersion "1.12.0"
+        }
+    }
+}
+
+def enableProguardInReleaseBuilds = false
+def jscFlavor = 'org.webkit:android-jsc:+'
+def hermesEnabled = project.ext.react.get("hermesEnabled") ?: "false"
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace "com.safetnetsecurity"
+
+    defaultConfig {
+        applicationId "com.safetnetsecurity"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "2.2.0"
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+    implementation("com.facebook.react:flipper-integration")
+    implementation("androidx.customview:customview:1.1.0")
+
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+}
+
+def cliPlatformsAndroid = file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
+if (!cliPlatformsAndroid.exists()) {
+    cliPlatformsAndroid = file("../../node_modules/react-native/node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
+}
+apply from: cliPlatformsAndroid
+applyNativeModulesAppBuildGradle(project)
+
+repositories {
+    google()
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+

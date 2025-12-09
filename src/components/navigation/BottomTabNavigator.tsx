@@ -1,0 +1,152 @@
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { colors, typography, spacing } from '../../utils';
+
+// Icon mapping function to replace Material Icons with emojis
+const getIconEmoji = (iconName: string | undefined): string => {
+  if (!iconName) {
+    return '📋';
+  }
+  const iconMap: { [key: string]: string } = {
+    'dashboard': '📊',
+    'notifications-none': '🔔',
+    'notifications': '🔔',
+    'description': '📄',
+    'person-outline': '👤',
+    'person': '👤',
+  };
+  return iconMap[iconName] || '📋';
+};
+
+interface TabItem {
+  name: string;
+  label: string;
+  icon: string;
+  activeIcon?: string;
+}
+
+const tabs: TabItem[] = [
+  { name: 'Dashboard', label: 'Dashboard', icon: 'dashboard', activeIcon: 'dashboard' },
+  { name: 'Alerts', label: 'Alerts', icon: 'notifications-none', activeIcon: 'notifications' },
+  { name: 'Logs', label: 'Logs', icon: 'description', activeIcon: 'description' },
+  { name: 'Profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
+];
+
+export const BottomTabNavigator = () => {
+  const navigation = useNavigation();
+  const route = useRoute();
+
+  const getActiveRouteName = () => {
+    const state = navigation.getState();
+    if (!state || !state.routes) return '';
+    
+    const route = state.routes[state.index];
+    if (!route) return '';
+    
+    // Check if route has nested state
+    if (route.state) {
+      const nestedState = route.state;
+      if (nestedState.routes && nestedState.index !== undefined && nestedState.routes[nestedState.index]) {
+        return nestedState.routes[nestedState.index].name;
+      }
+    }
+    return route.name || '';
+  };
+
+  const activeRoute = getActiveRouteName();
+
+  const handleTabPress = (tabName: string) => {
+    try {
+      if (tabName === 'Dashboard') {
+        navigation.navigate('Home' as never);
+      } else if (tabName === 'Alerts') {
+        navigation.navigate('Alerts' as never);
+      } else if (tabName === 'Logs') {
+        navigation.navigate('Logs' as never);
+      } else if (tabName === 'Profile') {
+        navigation.navigate('Profile' as never);
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      {tabs.map((tab) => {
+        // Check if this tab is active
+        const isActive = 
+          activeRoute === tab.name || 
+          (tab.name === 'Dashboard' && activeRoute === 'Home') ||
+          (tab.name === 'Alerts' && activeRoute === 'Alerts') ||
+          (tab.name === 'Logs' && activeRoute === 'Logs');
+        
+        return (
+          <TouchableOpacity
+            key={tab.name}
+            style={styles.tab}
+            onPress={() => handleTabPress(tab.name)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.icon, { color: isActive ? colors.primary : colors.lightText }]}>
+              {getIconEmoji((isActive && tab.activeIcon) ? tab.activeIcon : tab.icon)}
+            </Text>
+            <Text style={[styles.label, isActive && styles.activeLabel]}>
+              {tab.label}
+            </Text>
+            {isActive && <View style={styles.activeIndicator} />}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderGray,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    justifyContent: 'space-around',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  tab: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    position: 'relative',
+  },
+  icon: {
+    fontSize: 24,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  label: {
+    ...typography.caption,
+    color: colors.lightText,
+    fontSize: 12,
+  },
+  activeLabel: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: -spacing.sm,
+    left: '50%',
+    marginLeft: -20,
+    width: 40,
+    height: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+});
+
