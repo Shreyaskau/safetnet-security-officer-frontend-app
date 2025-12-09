@@ -5,7 +5,7 @@ buildscript {
         compileSdkVersion = 34
         targetSdkVersion = 34
         ndkVersion = "25.1.8937393"
-        kotlinVersion = "1.8.0"
+        kotlinVersion = "1.9.22"
         reactNativeVersion = [
             major: 0,
             minor: 73,
@@ -19,11 +19,22 @@ buildscript {
         google()
         mavenCentral()
         maven { url 'https://jitpack.io' }
+        gradlePluginPortal()
     }
     dependencies {
         classpath("com.android.tools.build:gradle:8.0.2")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22")
         classpath("com.facebook.react:react-native-gradle-plugin")
+    }
+    
+    // Force resolution for buildscript dependencies
+    configurations.classpath {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-gradle-plugin-api:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-gradle-plugin-idea:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-scripting-jvm:1.9.22"
+        }
     }
 }
 
@@ -33,6 +44,25 @@ allprojects {
         mavenCentral()
         maven { url 'https://jitpack.io' }
     }
+    
+    // Force Kotlin version resolution to fix download issues
+    configurations.all {
+        resolutionStrategy {
+            force "org.jetbrains.kotlin:kotlin-stdlib:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-reflect:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-gradle-plugin-api:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-gradle-plugin-idea:1.9.22"
+            force "org.jetbrains.kotlin:kotlin-scripting-jvm:1.9.22"
+        }
+    }
+}
+
+// Configure toolchain resolution to use Java 17
+tasks.withType(JavaCompile).configureEach {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
 apply plugin: "com.facebook.react.rootproject"

@@ -4,6 +4,10 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
         maven { url 'https://jitpack.io' }
+        // Add JetBrains repository for Kotlin plugins
+        maven { url 'https://maven.pkg.jetbrains.space/public/p/kotlinx-html/maven' }
+        // Foojay repository disabled - using JAVA_HOME directly to avoid API failures
+        // maven { url 'https://foojay.io/maven' }
     }
 }
 
