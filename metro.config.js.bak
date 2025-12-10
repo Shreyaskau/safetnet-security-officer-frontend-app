@@ -23,6 +23,13 @@ const config = {
   },
   resolver: {
     ...defaultConfig.resolver,
+    assetExts: [
+      ...defaultConfig.resolver.assetExts.filter((ext) => ext !== 'svg'),
+      'ttf',
+      'otf',
+      'woff',
+      'woff2',
+    ],
     alias: {
       ...defaultConfig.resolver.alias,
       'react-native-reanimated': path.resolve(__dirname, 'src/utils/reanimatedMock.js'),
@@ -51,12 +58,6 @@ const config = {
 };
 
 module.exports = mergeConfig(defaultConfig, config);
-
-
-
-
-
-
 
 
 

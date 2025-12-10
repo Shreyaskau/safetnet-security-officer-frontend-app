@@ -10,6 +10,9 @@ import {
 import { Alert } from '../types/alert.types';
 import { getSampleAlerts } from '../utils/sampleData';
 
+// Track if 404 has been logged to avoid console spam
+let alerts404Logged = false;
+
 export const useAlerts = () => {
   const dispatch = useAppDispatch();
   const officer = useAppSelector((state) => state.auth.officer);
@@ -21,23 +24,31 @@ export const useAlerts = () => {
   const fetchAlerts = async () => {
     if (!officer) return;
 
+    dispatch(setLoading(true));
     try {
-      dispatch(setLoading(true));
       const data = await alertService.getAlerts(
         officer.security_id,
         officer.geofence_id
       );
       dispatch(setAlerts(data));
     } catch (error: any) {
-      // Only log 404 errors, don't show them as critical errors
+      // Handle 404 errors gracefully - endpoint may not exist on backend
       if (error.response && error.response.status === 404) {
-        // Silently handle 404 - backend endpoint not available
-        // Use sample data instead of empty array
+        // Backend endpoint not available, use sample data
         dispatch(setAlerts(getSampleAlerts()));
+        // Only log once to avoid console spam
+        if (!alerts404Logged) {
+          console.log('[Alerts] Backend endpoint not available (404), using sample data');
+          alerts404Logged = true;
+        }
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        // Network errors - backend might be unreachable
+        dispatch(setAlerts(getSampleAlerts()));
+        console.warn('[Alerts] Network error - backend unreachable, using sample data');
       } else {
-        // Use sample data on other errors too for development
+        // Other errors - still use sample data for development
         dispatch(setAlerts(getSampleAlerts()));
-        console.error('Error fetching alerts:', error);
+        console.warn('[Alerts] Error fetching alerts, using sample data:', error.message || error);
       }
     } finally {
       dispatch(setLoading(false));

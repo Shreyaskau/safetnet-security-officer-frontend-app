@@ -15,6 +15,9 @@ import { colors, typography, spacing } from '../../utils';
 import { Alert } from '../../types/alert.types';
 import { getSampleLogs } from '../../utils/sampleData';
 
+// Track if 404 has been logged to avoid console spam
+let logs404Logged = false;
+
 export const LogsScreen = ({ navigation, route }: any) => {
   const [logs, setLogs] = useState<Alert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,17 +34,30 @@ export const LogsScreen = ({ navigation, route }: any) => {
     setIsLoading(true);
     try {
       const data = await alertService.getAlertLogs(officer.security_id, selectedTab);
-      setLogs(data.data || []);
-    } catch (error: any) {
-      // Only log 404 errors, don't show them as critical errors
-      if (error.response && error.response.status === 404) {
-        // Silently handle 404 - backend endpoint not available
-        // Use sample data instead of empty array
-        setLogs(getSampleLogs());
+      // Handle both direct array and { data: [] } format
+      if (Array.isArray(data)) {
+        setLogs(data);
       } else {
-      console.error('Error fetching logs:', error);
-      // Use sample data on other errors too
-      setLogs(getSampleLogs());
+        setLogs(data.data || []);
+      }
+    } catch (error: any) {
+      // Handle 404 errors gracefully - endpoint may not exist on backend
+      if (error.response && error.response.status === 404) {
+        // Backend endpoint not available, use sample data
+        setLogs(getSampleLogs());
+        // Only log once to avoid console spam
+        if (!logs404Logged) {
+          console.log('[Logs] Backend endpoint not available (404), using sample data');
+          logs404Logged = true;
+        }
+      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        // Network errors - backend might be unreachable
+        setLogs(getSampleLogs());
+        console.warn('[Logs] Network error - backend unreachable, using sample data');
+      } else {
+        // Other errors - still use sample data for development
+        setLogs(getSampleLogs());
+        console.warn('[Logs] Error fetching logs, using sample data:', error.message || error);
       }
     } finally {
       setIsLoading(false);

@@ -6,8 +6,10 @@ import { constants } from '../../utils/constants';
 import { mockLogin } from '../../utils/mockData';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Enable mock mode - set to true to use mock data instead of backend
-const USE_MOCK_DATA = false; // Change to false to use real backend
+import { ENABLE_API_CALLS } from '../config';
+
+// Use global API enable flag
+const USE_MOCK_DATA = !ENABLE_API_CALLS;
 
 export const authService = {
   login: async (credentials: LoginPayload): Promise<LoginResponse> => {

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ENABLE_API_CALLS } from '../config';
 
 export interface ConnectionStatus {
   isConnected: boolean;
@@ -19,6 +20,18 @@ export interface ConnectionStatus {
 export const testConnection = async (): Promise<ConnectionStatus> => {
   const baseURL = 'https://safetnet.onrender.com/api/security';
   const timestamp = new Date().toISOString();
+
+  // Skip API calls if disabled
+  if (!ENABLE_API_CALLS) {
+    return {
+      isConnected: false,
+      baseURL,
+      timestamp,
+      error: 'API calls are disabled. Enable API calls in src/api/config.ts',
+      databaseConnected: false,
+      databaseTestResult: 'API calls disabled',
+    };
+  }
 
   try {
     const startTime = Date.now();
