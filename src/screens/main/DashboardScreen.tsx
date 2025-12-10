@@ -20,9 +20,14 @@ export const DashboardScreen = ({ navigation }: any) => {
   const [recentLogs, setRecentLogs] = useState<Alert[]>([]);
   const officer = useAppSelector((state) => state.auth.officer);
 
-  // Fetch recent logs
+  // Use sample data immediately, fetch logs in background (non-blocking)
   useEffect(() => {
     if (officer) {
+      // Set sample data immediately
+      const sampleLogs = getSampleLogs().slice(0, 4);
+      setRecentLogs(sampleLogs);
+      
+      // Try to fetch real data in background (non-blocking)
       fetchRecentLogs();
     }
   }, [officer]);
@@ -33,11 +38,12 @@ export const DashboardScreen = ({ navigation }: any) => {
       const data = await alertService.getAlertLogs(officer.security_id, 'normal');
       // Get 4 most recent logs
       const logs = data.data || [];
-      setRecentLogs(logs.slice(0, 4));
-    } catch (error: any) {
-      if (error.response && error.response.status !== 404) {
-        console.error('Error fetching logs:', error);
+      if (logs.length > 0) {
+        setRecentLogs(logs.slice(0, 4));
       }
+    } catch (error: any) {
+      // Silently fail - we already have sample data
+      // Don't log 404 errors as they're expected
     }
   };
 

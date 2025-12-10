@@ -1,0 +1,77 @@
+API ENDPOINT SCAN REPORT
+========================
+Scan Date: $(Get-Date)
+Scan Target: src/ directory
+Purpose: Find axios/api calls with endpoints that do NOT start with leading "/"
+
+CRITERIA:
+- Looking for: api.get(...), api.post(...), api.put(...), api.delete(...)
+- Endpoint strings that do NOT start with "/"
+- Examples of WRONG: api.post('login/'), api.get('alerts'), axios.post(`url${endpoint}`)
+- Examples of CORRECT: api.post('/api/login/'), api.get('/api/alerts/')
+
+================================================================================
+ISSUES FOUND:
+================================================================================
+
+FILE: src/api/SecurityAPI.ts
+LINE: 206
+CODE: const endpoint = "login/"; // No leading slash - axios will combine with baseURL
+ISSUE: Endpoint string "login/" does not start with "/"
+FIXED SHOULD BE: const endpoint = "/login/";
+
+FILE: src/api/SecurityAPI.ts
+LINE: 213
+CODE: const res = await apiClient.post(endpoint, requestData, {
+ISSUE: The 'endpoint' variable (defined on line 206) is used here. Since endpoint = "login/", this is incorrect.
+FIXED SHOULD BE: const endpoint = "/login/"; (see line 206 fix above)
+
+================================================================================
+FILE: src/api/services/connectionTestService.ts
+LINE: 47
+CODE: serverTest = await axios.post(
+        `${baseURL}login/`,
+ISSUE: The endpoint part "login/" in the template literal does not start with "/"
+NOTE: While baseURL may end with "/", the endpoint should still start with "/" for consistency
+FIXED SHOULD BE: `${baseURL}/login/` OR ensure baseURL doesn't end with "/" and use `${baseURL}/login/`
+
+================================================================================
+FILE: src/api/services/connectionTestService.ts
+LINE: 80
+CODE: const dbTestResponse = await axios.post(
+          `${baseURL}login/`,
+ISSUE: The endpoint part "login/" in the template literal does not start with "/"
+FIXED SHOULD BE: `${baseURL}/login/` OR ensure baseURL doesn't end with "/" and use `${baseURL}/login/`
+
+================================================================================
+FILE: src/api/services/connectionTestService.ts
+LINE: 188
+CODE: const response = await axios.post(
+      `${baseURL}login/`,
+ISSUE: The endpoint part "login/" in the template literal does not start with "/"
+FIXED SHOULD BE: `${baseURL}/login/` OR ensure baseURL doesn't end with "/" and use `${baseURL}/login/`
+
+================================================================================
+
+SUMMARY:
+--------
+Total issues found: 4
+Files affected: 2
+  - src/api/SecurityAPI.ts: 1 issue (endpoint variable definition)
+  - src/api/services/connectionTestService.ts: 3 issues (template literal endpoints)
+
+NOTES:
+------
+1. In SecurityAPI.ts, the endpoint variable is defined without leading "/" but is used with apiClient
+   which has baseURL set. While this might work if baseURL ends with "/", it's not standard practice.
+
+2. In connectionTestService.ts, all three instances use template literals where baseURL (ending with "/")
+   is concatenated with "login/" (without leading "/"). This works but is inconsistent with REST API conventions.
+
+3. Best practice: All endpoint paths should start with "/" to ensure proper URL construction regardless
+   of baseURL configuration.
+
+================================================================================
+END OF REPORT
+================================================================================
+

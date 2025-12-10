@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { ENABLE_API_CALLS } from '../config';
+import apiConfig from '../config';
 
 export interface ConnectionStatus {
   isConnected: boolean;
@@ -18,7 +19,9 @@ export interface ConnectionStatus {
  * This function tests the Django REST API endpoints and verifies database access
  */
 export const testConnection = async (): Promise<ConnectionStatus> => {
-  const baseURL = 'https://safetnet.onrender.com/api/security';
+  // Use BASE_URL from config.ts and append /api/security/
+  // Ensure baseURL ends with / to properly combine with endpoints
+  const baseURL = `${apiConfig.BASE_URL}/api/security/`.replace(/\/+$/, '/');
   const timestamp = new Date().toISOString();
 
   // Skip API calls if disabled
@@ -74,7 +77,7 @@ export const testConnection = async (): Promise<ConnectionStatus> => {
         // Try login endpoint - this requires database access to check user
         // Even with wrong credentials, if we get 400/401, database is working
         const dbTestResponse = await axios.post(
-          `${baseURL}/login/`,
+          `${baseURL}login/`,
           { username: 'database_test', password: 'test' },
           {
             timeout: 10000,
@@ -180,8 +183,9 @@ export const testConnection = async (): Promise<ConnectionStatus> => {
  */
 export const pingServer = async (): Promise<boolean> => {
   try {
+    const baseURL = `${apiConfig.BASE_URL}/api/security/`;
     const response = await axios.post(
-      'https://safetnet.onrender.com/api/security/login/',
+      `${baseURL}login/`,
       { username: 'ping', password: 'test' },
       {
         timeout: 5000,
@@ -204,9 +208,10 @@ export const pingServer = async (): Promise<boolean> => {
  * Get current API configuration
  */
 export const getAPIConfig = () => {
+    const baseURL = `${apiConfig.BASE_URL}/api/security`;
     return {
-      baseURL: 'https://safetnet.onrender.com/api/security',
-      socketURL: 'wss://safetnet.onrender.com/ws/',
+      baseURL,
+      socketURL: `wss://${apiConfig.BASE_URL.replace('https://', '').replace('http://', '')}/ws/`,
     };
 };
 

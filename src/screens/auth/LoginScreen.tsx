@@ -139,8 +139,8 @@ export const LoginScreen = () => {
         },
       };
 
-      // Dispatch login success to update auth state with flag to navigate to SOS
-      dispatch(loginSuccess({ ...userData, navigateToSOS: true }));
+      // Dispatch login success to update auth state - navigate to Dashboard (Home)
+      dispatch(loginSuccess({ ...userData, navigateToSOS: false }));
     } catch (err: any) {
       console.error("Login error:", err);
       console.error("Error response:", err.response && err.response.data ? err.response.data : 'unknown');

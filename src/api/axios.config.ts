@@ -1,12 +1,12 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Config from 'react-native-dotenv';
+import apiConfig, { ENABLE_API_CALLS } from './config';
 
 // Determine base URL based on environment
-// For local development: http://localhost:8000
-// For production: https://safetnet.site or https://safetnet.onrender.com
+// Priority: .env file > config.ts default
 const getBaseURL = () => {
-  // Check if we have a custom API URL in env
+  // Check if we have a custom API URL in env (highest priority)
   if (Config.API_BASE_URL) {
     let url = Config.API_BASE_URL.trim();
     // Remove trailing slash if present
@@ -18,31 +18,24 @@ const getBaseURL = () => {
     if (url.endsWith('/api')) {
       url = url.slice(0, -4); // Remove '/api'
     }
-    console.log(`[API Config] Using base URL: ${url}`);
+    console.log(`[API Config] Using base URL from .env: ${url}`);
     return url;
   }
   
-  // Default to production URL (Render backend)
-  // To use local development, set API_BASE_URL in .env file:
-  // API_BASE_URL=http://localhost:8000
-  // Or change the default below
-  const defaultUrl = 'https://safetnet-backend.onrender.com';
-  console.log(`[API Config] Using default base URL: ${defaultUrl}`);
-  return defaultUrl;
-  
-  // For local development, uncomment and use:
-  // return 'http://localhost:8000';
+  // Use the BASE_URL from config.ts
+  const baseUrl = apiConfig.BASE_URL;
+  console.log(`[API Config] Using base URL from config: ${baseUrl}`);
+  return baseUrl;
 };
 
 const axiosInstance = axios.create({
   baseURL: getBaseURL(),
-  timeout: 30000,
+  timeout: 5000, // Reduced from 30000 to 5000ms (5 seconds) for faster failure
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-import { ENABLE_API_CALLS } from './config';
 
 // Request interceptor - Add auth token
 axiosInstance.interceptors.request.use(

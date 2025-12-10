@@ -10,6 +10,7 @@
     <!-- Allow HTTPS connections to Render -->
     <domain-config>
         <domain includeSubdomains="true">safetnet.onrender.com</domain>
+        <domain includeSubdomains="true">safetnet-backend.onrender.com</domain>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />

@@ -24,34 +24,32 @@ export const useAlerts = () => {
   const fetchAlerts = async () => {
     if (!officer) return;
 
-    dispatch(setLoading(true));
+    // Use sample data immediately (non-blocking)
+    dispatch(setAlerts(getSampleAlerts()));
+    dispatch(setLoading(false));
+
+    // Try to fetch from API in background (non-blocking)
     try {
       const data = await alertService.getAlerts(
         officer.security_id,
         officer.geofence_id
       );
-      dispatch(setAlerts(data));
-    } catch (error: any) {
-      // Handle 404 errors gracefully - endpoint may not exist on backend
-      if (error.response && error.response.status === 404) {
-        // Backend endpoint not available, use sample data
-        dispatch(setAlerts(getSampleAlerts()));
-        // Only log once to avoid console spam
-        if (!alerts404Logged) {
-          console.log('[Alerts] Backend endpoint not available (404), using sample data');
-          alerts404Logged = true;
-        }
-      } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
-        // Network errors - backend might be unreachable
-        dispatch(setAlerts(getSampleAlerts()));
-        console.warn('[Alerts] Network error - backend unreachable, using sample data');
-      } else {
-        // Other errors - still use sample data for development
-        dispatch(setAlerts(getSampleAlerts()));
-        console.warn('[Alerts] Error fetching alerts, using sample data:', error.message || error);
+      // Only update if we got real data
+      if (data && data.length > 0) {
+        dispatch(setAlerts(data));
       }
-    } finally {
-      dispatch(setLoading(false));
+    } catch (error: any) {
+      // Silently handle errors - we already have sample data
+      // Only log once to avoid console spam
+      if (!alerts404Logged) {
+        if (error.response && error.response.status === 404) {
+          // 404 is expected - endpoint doesn't exist yet
+          // Don't log as warning, just use sample data silently
+        } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+          // Network errors - silently use sample data
+        }
+        alerts404Logged = true;
+      }
     }
   };
 

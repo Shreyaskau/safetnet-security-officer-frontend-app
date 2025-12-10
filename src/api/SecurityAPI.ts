@@ -1,33 +1,30 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Config from 'react-native-dotenv';
+import apiConfig from './config';
 
-// Determine base URL - use environment variable or default to production
+// Determine base URL - use environment variable or default from config
 const getBaseURL = () => {
   // Priority 1: Check environment variable (for deployment flexibility)
   // This allows you to set API_BASE_URL in .env file or build configuration
-  try {
-    const Config = require('react-native-dotenv');
-    if (Config.API_BASE_URL) {
-      // Ensure URL ends with /api/security/ if not already included
-      let url = Config.API_BASE_URL.trim();
-      if (!url.endsWith('/')) {
-        url += '/';
-      }
-      if (!url.includes('/api/security')) {
-        url += 'api/security/';
-      }
-      console.log("Using API_BASE_URL from environment:", url);
-      return url;
+  if (Config.API_BASE_URL) {
+    // Ensure URL ends with /api/security/ if not already included
+    let url = Config.API_BASE_URL.trim();
+    if (!url.endsWith('/')) {
+      url += '/';
     }
-  } catch (e) {
-    // react-native-dotenv not available, continue with default
+    if (!url.includes('/api/security')) {
+      url += 'api/security/';
+    }
+    console.log("Using API_BASE_URL from environment:", url);
+    return url;
   }
   
-  // Priority 2: Production URL (Render) - DEPLOYED BACKEND
-  // This is the default for production builds
-  const productionURL = "https://safetnet.onrender.com/api/security/";
-  console.log("Using production API URL:", productionURL);
-  return productionURL;
+  // Priority 2: Use BASE_URL from config.ts and append /api/security/
+  const baseUrl = apiConfig.BASE_URL;
+  const apiUrl = `${baseUrl}/api/security/`;
+  console.log("Using API URL from config:", apiUrl);
+  return apiUrl;
   
   // For local development, create .env file with:
   // API_BASE_URL=http://127.0.0.1:8000/api/security/
@@ -205,12 +202,11 @@ export const loginOfficer = async (username: string, password: string) => {
     console.log("Request Body (JSON):", requestBody);
     console.log("Request Body (parsed):", JSON.parse(requestBody));
     
-    // Ensure exact URL match with Postman: https://safetnet.onrender.com/api/security/login/
+    // Construct full URL for logging
     const endpoint = "login/"; // No leading slash - axios will combine with baseURL
     const fullUrl = `${apiClient.defaults.baseURL}${endpoint}`;
     console.log("Full URL:", fullUrl);
-    console.log("Expected URL: https://safetnet.onrender.com/api/security/login/");
-    console.log("URL Match:", fullUrl === "https://safetnet.onrender.com/api/security/login/");
+    console.log("Expected URL:", `${apiConfig.BASE_URL}/api/security/login/`);
     console.log("===========================");
     
     // Make request with explicit headers - use exact endpoint format
