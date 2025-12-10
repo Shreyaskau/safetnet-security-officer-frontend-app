@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, ScrollView, Platform } from 'react-native';
 import { Alert } from '../../types/alert.types';
 import { useLocation } from '../../hooks/useLocation';
 import { locationService } from '../../api/services/locationService';
@@ -67,8 +67,29 @@ export const AlertResponseScreen = ({ route, navigation }: any) => {
   };
 
   const handleNavigation = () => {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${userLocation.latitude},${userLocation.longitude}`;
-    Linking.openURL(url);
+    // Use platform-agnostic maps URL that opens default maps app
+    // iOS: Opens Apple Maps
+    // Android: Opens default maps app (usually Google Maps if installed, else asks user)
+    const { latitude, longitude } = userLocation;
+    let url = '';
+    
+    if (Platform.OS === 'ios') {
+      // Apple Maps URL scheme
+      url = `http://maps.apple.com/?daddr=${latitude},${longitude}&dirflg=d`;
+    } else {
+      // Android: Use geo: URI which opens default maps app
+      // Falls back to browser-based maps if no app is available
+      url = `geo:${latitude},${longitude}?q=${latitude},${longitude}`;
+    }
+    
+    Linking.openURL(url).catch((err) => {
+      console.error('Error opening maps:', err);
+      // Fallback: Use generic coordinates URL that works in any browser
+      const fallbackUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}&zoom=15`;
+      Linking.openURL(fallbackUrl).catch(() => {
+        console.error('Failed to open any maps application');
+      });
+    });
   };
 
   const distance = officerLocation
@@ -92,6 +113,19 @@ export const AlertResponseScreen = ({ route, navigation }: any) => {
         onCall={handleCall}
         onViewLocation={() => {}}
       />
+
+      {/* Header with back button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.backButtonText}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Alert Details</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
       <SecurityMap
         initialRegion={{
@@ -199,6 +233,37 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.darkBackground,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+    backgroundColor: colors.darkBackground,
+    zIndex: 10,
+  },
+  backButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.white,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.white,
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 80, // Same width as back button to center title
   },
   map: {
     flex: 0.7, // 70% of screen

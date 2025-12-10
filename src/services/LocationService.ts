@@ -1,16 +1,25 @@
-import Geolocation from '@react-native-community/geolocation';
+import Geolocation from 'react-native-geolocation-service';
 import { Location } from '../types/location.types';
 import { locationService } from '../api/services/locationService';
+import { requestLocationPermission } from '../utils/permissions';
+import { requestLocationPermission } from '../utils/permissions';
 
 export class LocationService {
   private watchId: number | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
 
-  startTracking(
+  async startTracking(
     securityId: string,
     geofenceId: string,
     onLocationUpdate?: (location: Location) => void
   ) {
+    // Request permission first
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      console.error('Location permission denied');
+      return;
+    }
+
     this.watchId = Geolocation.watchPosition(
       (position) => {
         const location: Location = {
@@ -60,19 +69,23 @@ export class LocationService {
     }
   }
 
-  getCurrentLocation(): Promise<Location> {
-    return new Promise((resolve, reject) => {
+  async getCurrentLocation(): Promise<Location> {
+    // Request permission first
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) {
+      throw new Error('Location permission denied');
+    }
+
+    // Use callback-based API for better compatibility
+    const position = await new Promise<Geolocation.GeoPosition>((resolve, reject) => {
       Geolocation.getCurrentPosition(
-        (position) => {
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            altitude: position.coords.altitude || undefined,
-            heading: position.coords.heading || undefined,
-            speed: position.coords.speed || undefined,
-            timestamp: position.timestamp,
-          });
+        (pos) => {
+          // Validate position object
+          if (pos && pos.coords && typeof pos.coords.latitude === 'number' && typeof pos.coords.longitude === 'number') {
+            resolve(pos);
+          } else {
+            reject(new Error('Invalid location data received'));
+          }
         },
         (error) => {
           reject(error);
@@ -81,9 +94,36 @@ export class LocationService {
           enableHighAccuracy: true,
           timeout: 15000,
           maximumAge: 10000,
+          showLocationDialog: true,
+          forceRequestLocation: true,
         }
       );
     });
+
+    // Validate position before accessing coords
+    if (!position || !position.coords) {
+      throw new Error('Invalid position object received');
+    }
+
+    // Validate coordinates
+    if (
+      typeof position.coords.latitude !== 'number' ||
+      typeof position.coords.longitude !== 'number' ||
+      isNaN(position.coords.latitude) ||
+      isNaN(position.coords.longitude)
+    ) {
+      throw new Error('Invalid coordinates received');
+    }
+
+    return {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      altitude: position.coords.altitude || undefined,
+      heading: position.coords.heading || undefined,
+      speed: position.coords.speed || undefined,
+      timestamp: position.timestamp,
+    };
   }
 }
 

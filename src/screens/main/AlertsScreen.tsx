@@ -18,7 +18,6 @@ import { useAlerts } from '../../hooks/useAlerts';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { Alert } from '../../types/alert.types';
 import { colors, typography, spacing } from '../../utils';
-import { getSampleAlerts } from '../../utils/sampleData';
 
 export const AlertsScreen = ({ navigation }: any) => {
   const { alerts, refreshing, filter, refreshAlerts, changeFilter } = useAlerts();
@@ -40,8 +39,8 @@ export const AlertsScreen = ({ navigation }: any) => {
     navigation.navigate('AlertResponse', { alert });
   };
 
-  // Use sample data if no real alerts
-  const displayAlerts = alerts.length > 0 ? alerts : getSampleAlerts();
+  // Use only real alerts, no sample data
+  const displayAlerts = alerts;
 
   const stats = {
     active: displayAlerts.filter((a) => a.status === 'pending' || a.status === 'accepted').length,
@@ -138,7 +137,7 @@ export const AlertsScreen = ({ navigation }: any) => {
 
       <FloatingActionButton
         onPress={() => navigation.navigate('Broadcast')}
-        icon="+"
+        icon="add"
       />
     </View>
   );

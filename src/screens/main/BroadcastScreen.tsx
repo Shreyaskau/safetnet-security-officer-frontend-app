@@ -12,6 +12,7 @@ import { useAppSelector } from '../../redux/hooks';
 import { Button } from '../../components/common/Button';
 import { BroadcastProgressModal } from '../../components/modals/BroadcastProgressModal';
 import { broadcastService } from '../../api/services/broadcastService';
+import { requestLocationPermission } from '../../utils/permissions';
 import { colors, typography, spacing } from '../../utils';
 import Toast from 'react-native-toast-message';
 
@@ -23,11 +24,30 @@ export const BroadcastScreen = ({ navigation }: any) => {
   const [showProgress, setShowProgress] = useState(false);
   const [broadcastProgress, setBroadcastProgress] = useState(0);
   const [totalUsers] = useState(24);
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
   const alertTypes = [
     { key: 'general' as const, label: '🔔 General Notice', icon: '🔔' },
     { key: 'warning' as const, label: '⚠️ Warning', icon: '⚠️' },
     { key: 'all_clear' as const, label: '✅ All Clear', icon: '✅' },
+  ];
+
+  const quickTemplates = [
+    {
+      id: 'suspicious',
+      label: 'Suspicious activity',
+      message: '⚠️ ALERT: Suspicious activity detected in the area. All personnel please remain vigilant and report any unusual behavior immediately.',
+    },
+    {
+      id: 'secured',
+      label: 'Area secured',
+      message: '✅ UPDATE: Area has been secured and verified. Normal operations can resume. All clear for regular activities.',
+    },
+    {
+      id: 'shift',
+      label: 'Shift change',
+      message: '📋 NOTICE: Shift change in progress. Incoming team is taking over patrol duties. All personnel please coordinate handover.',
+    },
   ];
 
   const handleSend = async () => {
@@ -57,12 +77,31 @@ export const BroadcastScreen = ({ navigation }: any) => {
     }, 200);
 
     try {
+      // Request location permission first
+      const hasPermission = await requestLocationPermission();
+      
+      if (!hasPermission) {
+        Toast.show({
+          type: 'error',
+          text1: 'Permission Required',
+          text2: 'Location permission is required to send alerts',
+        });
+        clearInterval(progressInterval);
+        setShowProgress(false);
+        setBroadcastProgress(0);
+        return;
+      }
+
+      // Send broadcast - location will be fetched by broadcastService automatically
+
+      // Send broadcast - location will be fetched by broadcastService if not provided
       await broadcastService.sendBroadcast({
         security_id: officer.security_id,
         geofence_id: officer.geofence_id,
         message: message.trim(),
         alert_type: alertType,
         priority: highPriority,
+        // location_lat and location_long will be fetched by service if not provided
       });
 
       clearInterval(progressInterval);
@@ -149,7 +188,13 @@ export const BroadcastScreen = ({ navigation }: any) => {
             multiline
             numberOfLines={8}
             value={message}
-            onChangeText={setMessage}
+            onChangeText={(text) => {
+              setMessage(text);
+              // Clear selected template if user manually edits the message
+              if (selectedTemplate && text !== quickTemplates.find(t => t.id === selectedTemplate)?.message) {
+                setSelectedTemplate(null);
+              }
+            }}
             maxLength={500}
           />
           <Text style={styles.charCount}>{message.length} / 500</Text>
@@ -158,17 +203,28 @@ export const BroadcastScreen = ({ navigation }: any) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>QUICK TEMPLATES</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {['Suspicious activity', 'Area secured', 'Shift change'].map(
-              (template) => (
-                <TouchableOpacity
-                  key={template}
-                  style={styles.templatePill}
-                  onPress={() => setMessage(template)}
+            {quickTemplates.map((template) => (
+              <TouchableOpacity
+                key={template.id}
+                style={[
+                  styles.templatePill,
+                  selectedTemplate === template.id && styles.selectedTemplatePill,
+                ]}
+                onPress={() => {
+                  setMessage(template.message);
+                  setSelectedTemplate(template.id);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.templateText,
+                    selectedTemplate === template.id && styles.selectedTemplateText,
+                  ]}
                 >
-                  <Text style={styles.templateText}>{template}</Text>
-                </TouchableOpacity>
-              )
-            )}
+                  {template.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
         </View>
 
@@ -305,12 +361,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: colors.borderGray,
+    backgroundColor: colors.white,
     marginRight: spacing.sm,
+  },
+  selectedTemplatePill: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   templateText: {
     ...typography.secondary,
+    color: colors.darkText,
+  },
+  selectedTemplateText: {
+    color: colors.white,
+    fontWeight: '600',
   },
   recipientsCard: {
     flexDirection: 'row',

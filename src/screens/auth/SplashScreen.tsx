@@ -1,8 +1,17 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, Image } from 'react-native';
 import { useAppSelector } from '../../redux/hooks';
 import { colors, typography, spacing } from '../../utils';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
+
+// Safe logo loading - will use image if file exists, otherwise fallback to emoji
+const LOGO_PATH = '../../assets/images/safetnet-logo.png';
+let logoSource = null;
+try {
+  logoSource = require(LOGO_PATH);
+} catch (e) {
+  logoSource = null;
+}
 
 export const SplashScreen = ({ navigation }: any) => {
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
@@ -25,7 +34,15 @@ export const SplashScreen = ({ navigation }: any) => {
       <StatusBar barStyle="light-content" />
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <Text style={styles.logo}>🛡️</Text>
+          {logoSource ? (
+            <Image
+              source={logoSource}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          ) : (
+            <Text style={styles.logoFallback}>🛡️</Text>
+          )}
         </View>
         <Text style={styles.appName}>SafeTNet</Text>
         <Text style={styles.subtitle}>Security Officer Portal</Text>
@@ -46,16 +63,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.white,
+    width: 200,
+    height: 150,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.lg,
   },
   logo: {
-    fontSize: 64,
+    width: '100%',
+    height: '100%',
+  },
+  logoFallback: {
+    fontSize: 80,
+    color: colors.white,
   },
   appName: {
     ...typography.appTitle,

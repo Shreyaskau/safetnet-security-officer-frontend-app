@@ -8,10 +8,6 @@ import {
   setFilter,
 } from '../redux/slices/alertSlice';
 import { Alert } from '../types/alert.types';
-import { getSampleAlerts } from '../utils/sampleData';
-
-// Track if 404 has been logged to avoid console spam
-let alerts404Logged = false;
 
 export const useAlerts = () => {
   const dispatch = useAppDispatch();
@@ -24,31 +20,21 @@ export const useAlerts = () => {
   const fetchAlerts = async () => {
     if (!officer) return;
 
-    // Use sample data immediately (non-blocking)
-    dispatch(setAlerts(getSampleAlerts()));
-    dispatch(setLoading(false));
-
-    // Try to fetch from API in background (non-blocking)
+    dispatch(setLoading(true));
     try {
       const data = await alertService.getAlerts(
         officer.security_id,
-        officer.geofence_id
+        officer.geofence_id,
+        officer.name // Pass officer name to use for alerts created by this officer
       );
-      // Only update if we got real data
-      if (data && data.length > 0) {
-        dispatch(setAlerts(data));
-      }
+      dispatch(setAlerts(data || []));
+      dispatch(setLoading(false));
     } catch (error: any) {
-      // Silently handle errors - we already have sample data
-      // Only log once to avoid console spam
-      if (!alerts404Logged) {
-        if (error.response && error.response.status === 404) {
-          // 404 is expected - endpoint doesn't exist yet
-          // Don't log as warning, just use sample data silently
-        } else if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
-          // Network errors - silently use sample data
-        }
-        alerts404Logged = true;
+      // On error, set empty array instead of sample data
+      dispatch(setAlerts([]));
+      dispatch(setLoading(false));
+      if (error.response && error.response.status !== 404) {
+        dispatch(setError(error.message || 'Failed to fetch alerts'));
       }
     }
   };

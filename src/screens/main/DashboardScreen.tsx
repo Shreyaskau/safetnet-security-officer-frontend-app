@@ -13,21 +13,15 @@ import { Alert } from '../../types/alert.types';
 import { colors, typography, spacing } from '../../utils';
 import { useAppSelector } from '../../redux/hooks';
 import { alertService } from '../../api/services/alertService';
-import { getSampleAlerts, getSampleLogs } from '../../utils/sampleData';
 
 export const DashboardScreen = ({ navigation }: any) => {
   const { alerts } = useAlerts();
   const [recentLogs, setRecentLogs] = useState<Alert[]>([]);
   const officer = useAppSelector((state) => state.auth.officer);
 
-  // Use sample data immediately, fetch logs in background (non-blocking)
+  // Fetch logs when officer is available
   useEffect(() => {
     if (officer) {
-      // Set sample data immediately
-      const sampleLogs = getSampleLogs().slice(0, 4);
-      setRecentLogs(sampleLogs);
-      
-      // Try to fetch real data in background (non-blocking)
       fetchRecentLogs();
     }
   }, [officer]);
@@ -35,15 +29,13 @@ export const DashboardScreen = ({ navigation }: any) => {
   const fetchRecentLogs = async () => {
     if (!officer) return;
     try {
-      const data = await alertService.getAlertLogs(officer.security_id, 'normal');
+      const data = await alertService.getAlertLogs(officer.security_id, 'normal', officer.name);
       // Get 4 most recent logs
       const logs = data.data || [];
-      if (logs.length > 0) {
-        setRecentLogs(logs.slice(0, 4));
-      }
+      setRecentLogs(logs.slice(0, 4));
     } catch (error: any) {
-      // Silently fail - we already have sample data
-      // Don't log 404 errors as they're expected
+      // On error, set empty array instead of sample data
+      setRecentLogs([]);
     }
   };
 
@@ -52,8 +44,9 @@ export const DashboardScreen = ({ navigation }: any) => {
   };
 
   // Use sample data if no real alerts
-  const displayAlerts = alerts.length > 0 ? alerts : getSampleAlerts();
-  const displayLogs = recentLogs.length > 0 ? recentLogs : getSampleLogs().slice(0, 4);
+      // Use only real data, no sample data fallback
+      const displayAlerts = alerts;
+      const displayLogs = recentLogs;
 
   const stats = {
     active: displayAlerts.filter((a) => a.status === 'pending' || a.status === 'accepted').length,

@@ -35,12 +35,28 @@ android {
 
     namespace "com.safetnetsecurity"
 
+    // Load Google Maps API key from local.properties or environment variable
+    def localProperties = new Properties()
+    def localPropertiesFile = rootProject.file('local.properties')
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.withReader('UTF-8') { reader ->
+            localProperties.load(reader)
+        }
+    }
+    // Try to get API key from local.properties, environment variable, or use placeholder
+    def googleMapsApiKey = localProperties.getProperty('GOOGLE_MAPS_API_KEY') ?: 
+                          System.getenv('GOOGLE_MAPS_API_KEY') ?: 
+                          'YOUR_GOOGLE_MAPS_API_KEY_HERE'
+
     defaultConfig {
         applicationId "com.safetnetsecurity"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "2.2.0"
+        
+        // Make Google Maps API key available in manifest
+        manifestPlaceholders = [GOOGLE_MAPS_API_KEY: googleMapsApiKey]
     }
 
     signingConfigs {
@@ -68,6 +84,10 @@ dependencies {
     implementation("com.facebook.react:react-android")
     implementation("com.facebook.react:flipper-integration")
     implementation("androidx.customview:customview:1.1.0")
+
+    // Google Play Services Location for react-native-geolocation-service
+    // Using version 20.0.1 for better compatibility with react-native-geolocation-service 5.3.1
+    implementation("com.google.android.gms:play-services-location:20.0.1")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

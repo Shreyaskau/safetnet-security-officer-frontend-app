@@ -7,22 +7,27 @@ import { store, persistor } from './src/redux/store';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 import Toast from 'react-native-toast-message';
+import LeafletMapScreen from './src/screens/LeafletMapScreen';
 
 const App = () => {
-  return (
-    <ErrorBoundary>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <Provider store={store}>
-          <PersistGate loading={null} persistor={persistor}>
-            <SafeAreaProvider>
-              <AppNavigator />
-              <Toast />
-            </SafeAreaProvider>
-          </PersistGate>
-        </Provider>
-      </GestureHandlerRootView>
-    </ErrorBoundary>
-  );
+  // Temporarily show Leaflet map screen
+  return <LeafletMapScreen />;
+  
+  // Original app code (commented out temporarily):
+  // return (
+  //   <ErrorBoundary>
+  //     <GestureHandlerRootView style={{ flex: 1 }}>
+  //       <Provider store={store}>
+  //         <PersistGate loading={null} persistor={persistor}>
+  //           <SafeAreaProvider>
+  //             <AppNavigator />
+  //             <Toast />
+  //           </SafeAreaProvider>
+  //         </PersistGate>
+  //       </Provider>
+  //     </GestureHandlerRootView>
+  //   </ErrorBoundary>
+  // );
 };
 
 export default App;

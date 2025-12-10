@@ -13,10 +13,6 @@ import { EmptyState } from '../../components/common/EmptyState';
 import { AlertCardSkeleton } from '../../components/common/SkeletonLoader';
 import { colors, typography, spacing } from '../../utils';
 import { Alert } from '../../types/alert.types';
-import { getSampleLogs } from '../../utils/sampleData';
-
-// Track if 404 has been logged to avoid console spam
-let logs404Logged = false;
 
 export const LogsScreen = ({ navigation, route }: any) => {
   const [logs, setLogs] = useState<Alert[]>([]);
@@ -32,25 +28,17 @@ export const LogsScreen = ({ navigation, route }: any) => {
   const fetchLogs = async () => {
     if (!officer) return;
     
-    // Use sample data immediately (non-blocking)
-    setLogs(getSampleLogs());
-    setIsLoading(false);
-
-    // Try to fetch real data in background (non-blocking)
+    setIsLoading(true);
     try {
-      const data = await alertService.getAlertLogs(officer.security_id, selectedTab);
+      const data = await alertService.getAlertLogs(officer.security_id, selectedTab, officer.name);
       // Handle both direct array and { data: [] } format
       const fetchedLogs = Array.isArray(data) ? data : (data.data || []);
-      if (fetchedLogs.length > 0) {
-        setLogs(fetchedLogs);
-      }
+      setLogs(fetchedLogs);
     } catch (error: any) {
-      // Silently fail - we already have sample data
-      // Only log once to avoid console spam
-      if (!logs404Logged && error.response && error.response.status === 404) {
-        // 404 is expected - endpoint doesn't exist yet, don't log
-        logs404Logged = true;
-      }
+      // On error, set empty array instead of sample data
+      setLogs([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 

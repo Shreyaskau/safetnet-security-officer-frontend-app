@@ -8,28 +8,31 @@ const getBaseURL = () => {
   // Priority 1: Check environment variable (for deployment flexibility)
   // This allows you to set API_BASE_URL in .env file or build configuration
   if (Config.API_BASE_URL) {
-    // Ensure URL ends with /api/security/ if not already included
     let url = Config.API_BASE_URL.trim();
-    if (!url.endsWith('/')) {
-      url += '/';
+    // Remove trailing slash
+    if (url.endsWith('/')) {
+      url = url.slice(0, -1);
     }
+    // Add /api/security if not already included (without trailing slash)
     if (!url.includes('/api/security')) {
-      url += 'api/security/';
+      url += '/api/security';
     }
-    console.log("Using API_BASE_URL from environment:", url);
+    // Ensure no trailing slash (endpoints will start with /)
+    if (url.endsWith('/')) {
+      url = url.slice(0, -1);
+    }
     return url;
   }
   
-  // Priority 2: Use BASE_URL from config.ts and append /api/security/
+  // Priority 2: Use BASE_URL from config.ts and append /api/security (no trailing slash)
   const baseUrl = apiConfig.BASE_URL;
-  const apiUrl = `${baseUrl}/api/security/`;
-  console.log("Using API URL from config:", apiUrl);
+  const apiUrl = `${baseUrl}/api/security`;
   return apiUrl;
   
   // For local development, create .env file with:
-  // API_BASE_URL=http://127.0.0.1:8000/api/security/
+  // API_BASE_URL=http://127.0.0.1:8000/api/security
   // Or for Android Emulator:
-  // API_BASE_URL=http://10.0.2.2:8000/api/security/
+  // API_BASE_URL=http://10.0.2.2:8000/api/security
 };
 
 const apiClient = axios.create({
@@ -176,184 +179,57 @@ export const initializeToken = async () => {
 // --------------------------------------
 export const loginOfficer = async (username: string, password: string) => {
   try {
-    // Clear any old tokens before login
-    await AsyncStorage.removeItem("token");
-    await AsyncStorage.removeItem("refresh_token");
-    
-    // Trim whitespace from username and password (common issue)
-    const trimmedUsername = username.trim();
-    const trimmedPassword = password.trim();
-    
-    // Log exact values being sent (for debugging)
-    console.log("=== LOGIN REQUEST DEBUG ===");
-    console.log("Username (raw):", JSON.stringify(username));
-    console.log("Username (trimmed):", JSON.stringify(trimmedUsername));
-    console.log("Username length:", username.length, "->", trimmedUsername.length);
-    console.log("Password length:", password.length, "->", trimmedPassword.length);
-    
-    // Backend expects 'username' field (can be email or username)
+    // Trim whitespace and prepare request
     const requestData = { 
-      username: trimmedUsername, 
-      password: trimmedPassword 
+      username: username.trim(), 
+      password: password.trim()
     };
     
-    // Log the exact JSON being sent
-    const requestBody = JSON.stringify(requestData);
-    console.log("Request Body (JSON):", requestBody);
-    console.log("Request Body (parsed):", JSON.parse(requestBody));
-    
-    // Construct full URL for logging
-    const endpoint = "login/"; // No leading slash - axios will combine with baseURL
-    const fullUrl = `${apiClient.defaults.baseURL}${endpoint}`;
-    console.log("Full URL:", fullUrl);
-    console.log("Expected URL:", `${apiConfig.BASE_URL}/api/security/login/`);
-    console.log("===========================");
-    
-    // Make request with explicit headers - use exact endpoint format
+    // Make API request - use longer timeout for Render free tier
+    const endpoint = "/login/";
     const res = await apiClient.post(endpoint, requestData, {
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      transformRequest: [(data) => {
-        // Ensure data is properly stringified
-        const jsonString = JSON.stringify(data);
-        console.log("TransformRequest - JSON string:", jsonString);
-        return jsonString;
-      }],
+      timeout: 15000, // 15 second timeout - Render free tier can take 10-30s to wake up
     });
-    
-    console.log("Response Status:", res.status);
-    console.log("Response Data:", JSON.stringify(res.data, null, 2));
-    console.log("Response Headers:", JSON.stringify(res.headers, null, 2));
-    console.log("===========================");
 
-    // Django REST API response structure: { access, refresh, user: {...} }
     const responseData = res.data;
-    console.log("Login response (parsed):", responseData);
     
-    // Validate response structure
-    if (!responseData) {
-      console.error("ERROR: Response data is null or undefined");
-      throw new Error("Invalid response from server - no data received");
-    }
-    
-    // Check if login failed (400 with invalid credentials)
+    // Check for login failure
     if (res.status === 400) {
-      const errorMessage = (responseData && responseData.non_field_errors && responseData.non_field_errors[0]) || 
-                          (responseData && responseData.error) || 
-                          (responseData && responseData.detail) ||
+      const errorMessage = responseData?.non_field_errors?.[0] || 
+                          responseData?.error || 
+                          responseData?.detail ||
                           "Invalid credentials";
-      console.error("Login failed:", errorMessage);
       throw new Error(errorMessage);
     }
     
-    // Django returns 'access' token (JWT), not 'token'
-    const accessToken = (responseData && responseData.access) || (responseData && responseData.token);
-    const refreshToken = (responseData && responseData.refresh) ? responseData.refresh : undefined;
-    
-    // Log token information (without exposing full token)
-    if (accessToken) {
-      console.log("✅ Access token received:", accessToken.substring(0, 20) + "...");
-    } else {
-      console.error("❌ Access token NOT found in response");
-      console.error("Response keys:", Object.keys(responseData || {}));
-      console.error("Full response:", JSON.stringify(responseData, null, 2));
-    }
+    // Extract tokens
+    const accessToken = responseData?.access || responseData?.token;
+    const refreshToken = responseData?.refresh;
     
     if (!accessToken) {
-      console.error("Access token not found in login response:", responseData);
-      throw new Error("Access token not found in login response. Please check backend authentication configuration.");
-    }
-    
-    // Validate user data exists
-    if (!responseData.user) {
-      console.warn("⚠️ User data not found in response, but token received");
-      console.warn("Response structure:", Object.keys(responseData));
-    } else {
-      console.log("✅ User data received:", {
-        id: responseData.user.id,
-        username: responseData.user.username,
-        email: responseData.user.email,
-        role: responseData.user.role,
-      });
+      throw new Error("Access token not received from server");
     }
 
-    // Save access token
-    await setToken(accessToken);
-    
-    // Save refresh token if provided
+    // Save tokens in background (non-blocking) - return immediately
+    setToken(accessToken).catch(() => {}); // Fire and forget
     if (refreshToken) {
-      await AsyncStorage.setItem("refresh_token", refreshToken);
+      AsyncStorage.setItem("refresh_token", refreshToken).catch(() => {}); // Fire and forget
     }
 
     return responseData;
   } catch (error: any) {
-    // Enhanced error logging
-    console.error("=== LOGIN ERROR DEBUG ===");
-    console.error("Error type:", error.name);
-    console.error("Error message:", error.message);
-    console.error("Error code:", error.code);
-    
+    // Simplified error handling (fast, minimal logging)
     if (error.response) {
-      // Server responded with error
-      console.error("Response status:", error.response.status);
-      console.error("Response data:", error.response.data);
-      console.error("Response headers:", error.response.headers);
-    } else if (error.request) {
-      // Request made but no response
-      console.error("No response received");
-      console.error("Request config:", error.config);
-      console.error("Request URL:", error.config && error.config.url ? error.config.url : 'unknown');
-      console.error("Request baseURL:", error.config && error.config.baseURL ? error.config.baseURL : 'unknown');
-      console.error("Full URL attempted:", error.config && error.config.baseURL && error.config.url ? `${error.config.baseURL}${error.config.url}` : 'unknown');
-    } else {
-      // Error setting up request
-      console.error("Error setting up request:", error.message);
-    }
-    console.error("===========================");
-    
-    // Enhanced error logging for 400 errors
-    if (error.response && error.response.status === 400) {
-      console.error("400 Bad Request - Login failed:");
-      console.error("Request URL:", error.config && error.config.url ? error.config.url : 'unknown');
-      console.error("Request Data:", error.config && error.config.data ? error.config.data : 'unknown');
-      console.error("Response Data:", error.response && error.response.data ? error.response.data : 'unknown');
-      console.error("Response Status:", error.response && error.response.status ? error.response.status : 'unknown');
-      console.error("Full Error:", error.response && error.response.data ? JSON.stringify(error.response.data, null, 2) : 'unknown');
-      
-      // Extract error message from Django REST Framework format
-      const backendError = error.response && error.response.data ? error.response.data : null;
-      let errorMessage = 'Invalid credentials. Please check your username and password.';
-      
-      // Handle Django REST Framework error formats
-      if (backendError) {
-        // Format: { "non_field_errors": ["Invalid credentials."] }
-        if (backendError.non_field_errors && Array.isArray(backendError.non_field_errors)) {
-          errorMessage = backendError.non_field_errors[0];
-        }
-        // Format: { "message": "Invalid credentials" }
-        else if (backendError.message) {
-          errorMessage = backendError.message;
-        }
-        // Format: { "error": "Invalid credentials" }
-        else if (backendError.error) {
-          errorMessage = backendError.error;
-        }
-        // Format: { "detail": "Invalid credentials" }
-        else if (backendError.detail) {
-          errorMessage = backendError.detail;
-        }
-        // Format: string
-        else if (typeof backendError === 'string') {
-          errorMessage = backendError;
-        }
+      const status = error.response.status;
+      if (status === 400) {
+        const errorMsg = error.response.data?.non_field_errors?.[0] || 
+                        error.response.data?.error || 
+                        error.response.data?.detail ||
+                        "Invalid credentials";
+        throw new Error(errorMsg);
+      } else if (status >= 500) {
+        throw new Error("Server error. Please try again later.");
       }
-      
-      const customError = new Error(errorMessage);
-      (customError as any).response = error.response;
-      (customError as any).status = 400;
-      throw customError;
     }
     throw error;
   }

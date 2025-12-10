@@ -242,7 +242,7 @@ export class APITestSuite {
 
     // Get Alert Logs
     await this.testAPI('Alert - Get Logs', async () => {
-      const logs = await alertService.getAlertLogs(this.userId!);
+      const logs = await alertService.getAlertLogs(this.userId!, undefined, undefined);
       return logs;
     });
   }

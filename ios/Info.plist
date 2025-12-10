@@ -30,7 +30,7 @@
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>SafeTNet needs your location to track your position for emergency response</string>
+	<string>This app requires your location to display your position on the map.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>SafeTNet needs your location to respond to emergencies in your assigned area</string>
 	<key>NSLocationAlwaysUsageDescription</key>

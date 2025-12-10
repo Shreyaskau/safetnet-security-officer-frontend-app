@@ -30,7 +30,7 @@ const getBaseURL = () => {
 
 const axiosInstance = axios.create({
   baseURL: getBaseURL(),
-  timeout: 5000, // Reduced from 30000 to 5000ms (5 seconds) for faster failure
+  timeout: 20000, // 20 seconds - Render free tier can take 10-30 seconds to wake up
   headers: {
     'Content-Type': 'application/json',
   },
@@ -40,21 +40,8 @@ const axiosInstance = axios.create({
 // Request interceptor - Add auth token
 axiosInstance.interceptors.request.use(
   async (config) => {
-    // Skip logging if API calls are disabled
-    if (ENABLE_API_CALLS) {
-      // Log the request URL for debugging
-      const fullUrl = `${config.baseURL}${config.url}`;
-      console.log(`[API Request] ${config.method?.toUpperCase()} ${fullUrl}`);
-    }
-    
-    // Try to get token from AsyncStorage (Django JWT format)
-    let token = await AsyncStorage.getItem('token');
-    
-    // Fallback to old storage key for backward compatibility
-    if (!token) {
-      token = await AsyncStorage.getItem('authToken');
-    }
-    
+    // Get token from AsyncStorage (minimal logging for login speed)
+    const token = await AsyncStorage.getItem('token') || await AsyncStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -65,14 +52,13 @@ axiosInstance.interceptors.request.use(
 
 // Track logged 404 endpoints to avoid console spam
 const logged404Endpoints = new Set<string>();
+// Track logged network errors to avoid console spam
+const loggedNetworkErrors = new Set<string>();
 
-// Response interceptor - Handle errors
+// Response interceptor - Handle errors (minimal logging for speed)
 axiosInstance.interceptors.response.use(
   (response) => {
-    // Only log if API calls are enabled
-    if (ENABLE_API_CALLS) {
-      console.log(`[API Response] ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
-    }
+    // Don't log successful responses (faster, less console noise)
     return response;
   },
   async (error) => {
@@ -96,10 +82,15 @@ axiosInstance.interceptors.response.use(
       }
     } else if (error.request) {
       // Request made but no response received (network error)
-      console.error(`[API Network Error] ${error.config?.method?.toUpperCase()} ${error.config?.url || error.config?.baseURL}`);
-      console.error(`[API Network Error] No response received. Check if backend is running at: ${error.config?.baseURL}`);
-      console.error(`[API Network Error] Full URL: ${error.config?.baseURL}${error.config?.url}`);
-      console.error(`[API Network Error] Error details:`, error.message);
+      const endpoint = `${error.config?.method?.toUpperCase()} ${error.config?.url || error.config?.baseURL}`;
+      // Only log network errors once per endpoint to avoid spam
+      if (!loggedNetworkErrors.has(endpoint)) {
+        loggedNetworkErrors.add(endpoint);
+        console.warn(`[API Network] Connection timeout/error for: ${endpoint}`);
+        console.warn(`[API Network] Backend may be sleeping (Render free tier takes 10-30s to wake up)`);
+        console.warn(`[API Network] URL: ${error.config?.baseURL}${error.config?.url}`);
+        console.warn(`[API Network] Wait 30 seconds and try again, or check Render dashboard`);
+      }
     } else {
       // Something else happened
       console.error(`[API Error]`, error.message);

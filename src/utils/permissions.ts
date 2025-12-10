@@ -4,19 +4,46 @@ import { request, PERMISSIONS, RESULTS, Permission, checkNotifications, requestN
 export const requestLocationPermission = async (): Promise<boolean> => {
   if (Platform.OS === 'android') {
     try {
+      // First check if permission is already granted
+      const checkResult = await PermissionsAndroid.check(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+      
+      if (checkResult) {
+        return true;
+      }
+
+      // Request permission
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
           title: 'Location Permission',
-          message: 'SafeTNet needs access to your location to track your position',
+          message: 'SafeTNet needs access to your location to send alerts and track your position',
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Cancel',
           buttonPositive: 'OK',
         }
       );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
+      
+      const isGranted = granted === PermissionsAndroid.RESULTS.GRANTED;
+      
+      // If fine location granted, also request coarse location for compatibility
+      if (isGranted) {
+        await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+          {
+            title: 'Location Permission',
+            message: 'SafeTNet also needs approximate location access',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+      }
+      
+      return isGranted;
     } catch (err) {
-      console.warn(err);
+      console.warn('Location permission error:', err);
       return false;
     }
   } else {

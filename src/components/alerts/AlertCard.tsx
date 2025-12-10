@@ -90,9 +90,11 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond }) => {
           {alert.message}
         </Text>
 
-        <Text style={[styles.location, isCompleted && styles.completedText]}>
-          📍 {alert.location.address}
-        </Text>
+        {alert.location?.address && (
+          <Text style={[styles.location, isCompleted && styles.completedText]}>
+            📍 {alert.location.address}
+          </Text>
+        )}
 
         <Text style={[styles.timestamp, isCompleted && styles.completedText]}>
           {formatRelativeTime(alert.timestamp)}

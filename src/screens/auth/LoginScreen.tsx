@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Image,
 } from 'react-native';
 import { loginOfficer } from '../../api/SecurityAPI';
 import { useAppDispatch } from '../../redux/hooks';
@@ -16,6 +17,15 @@ import { loginSuccess } from '../../redux/slices/authSlice';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../utils';
 import Toast from 'react-native-toast-message';
+
+// Safe logo loading - will use image if file exists, otherwise fallback to emoji
+const LOGO_PATH = '../../assets/images/safetnet-logo.png';
+let logoSource = null;
+try {
+  logoSource = require(LOGO_PATH);
+} catch (e) {
+  logoSource = null;
+}
 
 export const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -29,41 +39,6 @@ export const LoginScreen = () => {
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
 
-  const handleSkip = () => {
-    // Set mock user data for development/testing
-    const mockUserData = {
-      token: 'skip_token_' + Date.now(),
-      refreshToken: 'skip_refresh_token',
-      officer: {
-        security_id: '999',
-        name: 'Test Officer',
-        email_id: 'test.officer@safetnet.com',
-        mobile: '+1234567890',
-        security_role: 'security_officer',
-        geofence_id: 'GEO001',
-        user_image: '',
-        status: 'active',
-        stats: {
-          total_responses: 156,
-          avg_response_time: 3.2,
-          active_hours: 240,
-          area_coverage: 8.5,
-          rating: 4.8,
-        },
-      },
-    };
-
-    // Dispatch login success to update auth state
-    // AppNavigator will automatically switch to MainNavigator when isAuthenticated becomes true
-    dispatch(loginSuccess({ ...mockUserData, navigateToSOS: false }));
-    
-    Toast.show({
-      type: 'info',
-      text1: 'Skipped Login',
-      text2: 'Using test mode - some features may be limited',
-    });
-  };
-
   const handleLogin = async () => {
     if (!email || !password) {
       Toast.show({
@@ -76,60 +51,27 @@ export const LoginScreen = () => {
 
     try {
       setIsLoading(true);
-      // Use email as username (backend accepts username field which can be email)
+      
+      // Make login request
       const res = await loginOfficer(email, password);
-      console.log("Logged in:", res);
-
-      // Django REST API response format: { access, refresh, user: { id, username, email, role, ... } }
-      console.log("=== LOGIN RESPONSE VALIDATION ===");
-      console.log("Response structure:", {
-        hasAccess: !!res.access,
-        hasToken: !!res.token,
-        hasRefresh: !!res.refresh,
-        hasUser: !!res.user,
-        responseKeys: Object.keys(res || {}),
-      });
       
+      // Extract tokens and user data (optimized - minimal processing)
       const accessToken = res.access || res.token;
-      const refreshToken = res.refresh;
-      
-      if (!accessToken) {
-        console.error("❌ No access token in response");
-        console.error("Response keys:", Object.keys(res || {}));
-        console.error("Full response:", JSON.stringify(res, null, 2));
-        throw new Error("Access token not received from server. Please check backend authentication configuration.");
-      }
-
-      // Extract user data from Django response
       const user = res.user || {};
       
-      if (!user || !user.id) {
-        console.warn("⚠️ User data missing or incomplete in response");
-        console.warn("User object:", user);
-      } else {
-        console.log("✅ User data validated:", {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-        });
+      if (!accessToken) {
+        throw new Error("Access token not received from server");
       }
+
+      // Prepare user data (optimized - single object creation)
       const userData = {
-        token: accessToken, // Use access token
-        refreshToken: refreshToken, // Store refresh token for future use
+        token: accessToken,
+        refreshToken: res.refresh,
         officer: {
-          security_id: (() => {
-            if (user && user.id) {
-              return String(user.id);
-            }
-            if (res && res.id) {
-              return String(res.id);
-            }
-            return '';
-          })(),
-          name: user.first_name || user.last_name 
-            ? `${user.first_name || ''} ${user.last_name || ''}`.trim() 
-            : user.username || email, // Use full name if available, else username
+          security_id: String(user.id || ''),
+          name: (user.first_name && user.last_name) 
+            ? `${user.first_name} ${user.last_name}`.trim() 
+            : (user.first_name || user.username || email),
           email_id: user.email || user.username || email,
           mobile: user.mobile || '',
           security_role: user.role || 'security_officer',
@@ -139,9 +81,11 @@ export const LoginScreen = () => {
         },
       };
 
-      // Dispatch login success to update auth state - navigate to Dashboard (Home)
+      // Dispatch login success immediately - navigation happens automatically
       dispatch(loginSuccess({ ...userData, navigateToSOS: false }));
+      setIsLoading(false); // Clear loading state immediately
     } catch (err: any) {
+      setIsLoading(false); // Clear loading state on error
       console.error("Login error:", err);
       console.error("Error response:", err.response && err.response.data ? err.response.data : 'unknown');
       console.error("Error status:", err.response && err.response.status ? err.response.status : 'unknown');
@@ -221,7 +165,17 @@ export const LoginScreen = () => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header Section (40% of screen) */}
         <View style={styles.header}>
-          <Text style={styles.logo}>🛡️</Text>
+          <View style={styles.logoContainer}>
+            {logoSource ? (
+              <Image
+                source={logoSource}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <Text style={styles.logoFallback}>🛡️</Text>
+            )}
+          </View>
           <Text style={styles.appName}>SafeTNet Security</Text>
           <Text style={styles.subtitle}>Officer Portal</Text>
         </View>
@@ -296,14 +250,6 @@ export const LoginScreen = () => {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.skipButton}
-            onPress={handleSkip}
-            disabled={isLoading}
-          >
-            <Text style={styles.skipButtonText}>Skip Login (Test Mode)</Text>
-          </TouchableOpacity>
-
           <Text style={styles.versionText}>v2.2.0</Text>
         </View>
       </ScrollView>
@@ -327,9 +273,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     alignItems: 'center',
   },
-  logo: {
-    fontSize: 80,
+  logoContainer: {
+    width: 200,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 12,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  logoFallback: {
+    fontSize: 80,
+    color: colors.white,
   },
   appName: {
     fontSize: 28,
@@ -429,22 +386,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.white,
     letterSpacing: 0.5,
-  },
-  skipButton: {
-    height: 44,
-    backgroundColor: 'transparent',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  skipButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.mediumGray,
-    letterSpacing: 0.3,
   },
   versionText: {
     fontSize: 12,
