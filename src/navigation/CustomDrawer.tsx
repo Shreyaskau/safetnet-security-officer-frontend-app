@@ -44,13 +44,12 @@ export const CustomDrawer = (props: DrawerContentComponentProps) => {
       },
     },
     {
-      name: 'Logs',
-      label: 'Logs',
-      icon: 'description',
-      activeIcon: 'description',
-      badge: 8,
+      name: 'Alerts',
+      label: 'Alerts',
+      icon: 'notifications-none',
+      activeIcon: 'notifications',
       onPress: () => {
-        props.navigation.navigate('Logs');
+        props.navigation.navigate('Alerts');
         props.navigation.closeDrawer();
       },
     },

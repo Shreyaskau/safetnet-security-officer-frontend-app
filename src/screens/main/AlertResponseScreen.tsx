@@ -1,41 +1,55 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, ScrollView, Platform } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Linking, ScrollView, Platform, Alert as RNAlert } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { Alert } from '../../types/alert.types';
 import { useLocation } from '../../hooks/useLocation';
 import { locationService } from '../../api/services/locationService';
 import { AcceptAlertModal } from '../../components/modals/AcceptAlertModal';
-import { SecurityMap } from '../../components/maps/SecurityMap';
-import { CustomMarker } from '../../components/maps/CustomMarker';
-import { RoutePolyline } from '../../components/maps/RoutePolyline';
 import { colors, shadows } from '../../utils';
 import { calculateDistance, formatRelativeTime } from '../../utils/helpers';
 import { useAlerts } from '../../hooks/useAlerts';
+import { requestLocationPermissionWithCheck } from '../../utils/permissions';
 
 export const AlertResponseScreen = ({ route, navigation }: any) => {
   const { alert } = route.params as { alert: Alert };
-  const { location: officerLocation } = useLocation();
+  const { location: officerLocation, getCurrentLocation } = useLocation();
   const { acceptAlert } = useAlerts();
   const [userLocation, setUserLocation] = useState(alert.location);
   const [estimatedArrival, setEstimatedArrival] = useState<number | null>(null);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
 
+  // Request location permission when screen loads
   useEffect(() => {
-    // Poll user location every 5 seconds
-    const interval = setInterval(async () => {
+    async function requestPermission() {
+      setIsRequestingPermission(true);
       try {
-        const data = await locationService.getUserLocation(alert.user_id);
-        if (data.latitude && data.longitude) {
-          setUserLocation({
-            latitude: parseFloat(data.latitude),
-            longitude: parseFloat(data.longitude),
-            address: userLocation.address,
-          });
+        const hasPermission = await requestLocationPermissionWithCheck(true);
+        if (hasPermission) {
+          // Try to get current location after permission is granted
+          try {
+            await getCurrentLocation();
+          } catch (error) {
+            console.warn('Error getting location after permission granted:', error);
+          }
         }
       } catch (error) {
-        console.error('Error fetching user location:', error);
+        console.error('Error requesting location permission:', error);
+      } finally {
+        setIsRequestingPermission(false);
       }
-    }, 5000);
+    }
+    requestPermission();
+  }, []);
 
+  useEffect(() => {
+    // Note: User location is already in the alert object
+    // The alert contains the location when it was created
+    // Polling for user location updates is disabled as the endpoint doesn't exist
+    // If you need live updates, use the SOS alert refresh endpoint instead
+    // 
+    // For now, we use the location from the alert which is the initial emergency location
+    
     // Calculate estimated arrival time
     if (officerLocation) {
       const distance = calculateDistance(
@@ -48,17 +62,79 @@ export const AlertResponseScreen = ({ route, navigation }: any) => {
       const timeInMinutes = Math.round((distance / 30) * 60);
       setEstimatedArrival(timeInMinutes);
     }
-
+    
+    // No cleanup needed since we're not using intervals anymore
+    // Uncomment below if user location polling becomes available:
+    /*
+    const interval = setInterval(async () => {
+      try {
+        const data = await locationService.getUserLocation(alert.user_id);
+        if (data.latitude && data.longitude) {
+          setUserLocation({
+            latitude: parseFloat(data.latitude),
+            longitude: parseFloat(data.longitude),
+            address: userLocation.address,
+          });
+        }
+      } catch (error) {
+        // Silently fail - user location comes from alert
+        console.warn('User location polling not available, using alert location');
+      }
+    }, 5000);
     return () => clearInterval(interval);
-  }, [officerLocation, alert.user_id]);
+    */
+  }, [officerLocation, userLocation, alert.user_id]);
 
   const handleAccept = async () => {
     try {
-      await acceptAlert(alert.log_id, estimatedArrival || undefined);
+      // Get alert ID - try log_id first, then id, then fallback
+      const alertId = alert.log_id || alert.id;
+      
+      if (!alertId) {
+        RNAlert.alert(
+          'Error',
+          'Alert ID is missing. Cannot accept this alert.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Ensure we have location permission before accepting
+      const hasPermission = await requestLocationPermissionWithCheck(true);
+      if (!hasPermission) {
+        RNAlert.alert(
+          'Location Permission Required',
+          'Location permission is required to calculate distance and estimated arrival time. Please grant permission to continue.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Grant Permission',
+              onPress: async () => {
+                const granted = await requestLocationPermissionWithCheck(true);
+                if (granted) {
+                  // Retry accepting after permission is granted
+                  try {
+                    await acceptAlert(alertId, estimatedArrival || undefined);
+                    setShowAcceptModal(false);
+                    navigation.goBack();
+                  } catch (error) {
+                    console.error('Error accepting alert:', error);
+                    RNAlert.alert('Error', 'Failed to accept alert. Please try again.');
+                  }
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+
+      await acceptAlert(alertId, estimatedArrival || undefined);
       setShowAcceptModal(false);
       navigation.goBack();
     } catch (error) {
       console.error('Error accepting alert:', error);
+      RNAlert.alert('Error', 'Failed to accept alert. Please try again.');
     }
   };
 
@@ -127,45 +203,14 @@ export const AlertResponseScreen = ({ route, navigation }: any) => {
         <View style={styles.headerSpacer} />
       </View>
 
-      <SecurityMap
-        initialRegion={{
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
+      <WebView
+        source={{ html: getAlertMapHTML(userLocation, officerLocation, alert) }}
         style={styles.map}
-      >
-        {/* Officer Marker */}
-        {officerLocation && (
-          <CustomMarker
-            coordinate={{
-              latitude: officerLocation.latitude,
-              longitude: officerLocation.longitude,
-            }}
-            type="officer"
-            label="You"
-          />
-        )}
-
-        {/* User Marker */}
-        <CustomMarker
-          coordinate={{
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-          }}
-          type="emergency"
-          label={alert.user_name}
-        />
-
-        {/* Route Line */}
-        {officerLocation && (
-          <RoutePolyline
-            origin={officerLocation}
-            destination={userLocation}
-          />
-        )}
-      </SecurityMap>
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        startInLoadingState={true}
+        scalesPageToFit={true}
+      />
 
       <View style={styles.detailsCard}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -177,30 +222,30 @@ export const AlertResponseScreen = ({ route, navigation }: any) => {
               style={styles.userProfileImage}
             />
             <View style={styles.userDetailsColumn}>
-              <Text style={styles.userName}>{alert.user_name}</Text>
+              <Text style={styles.userName}>{alert.user_name || 'Unknown User'}</Text>
               <View style={styles.emergencyTypeBadge}>
                 <Text style={styles.emergencyTypeText}>
                   {alert.alert_type === 'emergency' ? 'EMERGENCY' : 'NORMAL'}
                 </Text>
               </View>
-              <Text style={styles.contactInfo}>📞 {alert.user_phone}</Text>
+              <Text style={styles.contactInfo}>📞 {alert.user_phone || 'N/A'}</Text>
               <Text style={styles.timeInfo}>
-                {formatRelativeTime(alert.timestamp)}
+                {alert.timestamp ? formatRelativeTime(alert.timestamp) : 'Just now'}
               </Text>
             </View>
           </View>
 
           <View style={styles.locationSection}>
-            <Text style={styles.addressText}>📍 {alert.location.address}</Text>
-            {distance && (
+            <Text style={styles.addressText}>📍 {alert.location?.address || 'Location not available'}</Text>
+            {distance !== null && distance !== undefined && (
               <Text style={styles.distanceText}>{distance.toFixed(1)} mi away</Text>
             )}
-            {estimatedArrival && (
+            {estimatedArrival !== null && estimatedArrival !== undefined && (
               <Text style={styles.etaText}>ETA: ~{estimatedArrival} min</Text>
             )}
           </View>
 
-          {alert.message && (
+          {alert.message && alert.message.trim() !== '' && (
             <View style={styles.messageSection}>
               <Text style={styles.messageLabel}>Message:</Text>
               <Text style={styles.messageText}>{alert.message}</Text>
@@ -405,3 +450,102 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
 });
+
+// Generate Leaflet map HTML for alert details
+const getAlertMapHTML = (
+  userLocation: { latitude: number; longitude: number },
+  officerLocation: { latitude: number; longitude: number } | null,
+  alert: Alert
+) => {
+  // Calculate center point (between user and officer if officer location available, else use user location)
+  const center = officerLocation
+    ? {
+        lat: (userLocation.latitude + officerLocation.latitude) / 2,
+        lng: (userLocation.longitude + officerLocation.longitude) / 2,
+      }
+    : {
+        lat: userLocation.latitude,
+        lng: userLocation.longitude,
+      };
+
+  // Create route polyline coordinates if officer location is available
+  const routeCoordinates = officerLocation
+    ? `[[${officerLocation.latitude}, ${officerLocation.longitude}], [${userLocation.latitude}, ${userLocation.longitude}]]`
+    : '[]';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const center = [${center.lat}, ${center.lng}];
+    const userLoc = [${userLocation.latitude}, ${userLocation.longitude}];
+    const officerLoc = ${officerLocation ? `[${officerLocation.latitude}, ${officerLocation.longitude}]` : 'null'};
+    const routeCoords = ${routeCoordinates};
+    
+    // Initialize map
+    const map = L.map('map').setView(center, 13);
+    
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map);
+    
+    // Add user location marker (emergency)
+    const userMarker = L.marker(userLoc, {
+      icon: L.divIcon({
+        className: 'emergency-marker',
+        html: '<div style="font-size: 40px;">🚨</div>',
+        iconSize: [40, 40],
+        iconAnchor: [20, 40]
+      })
+    }).addTo(map);
+    userMarker.bindPopup('${(alert.user_name || 'User').replace(/'/g, "\\'")}<br/>Emergency Location');
+    
+    // Add officer location marker if available
+    let officerMarker = null;
+    if (officerLoc) {
+      officerMarker = L.marker(officerLoc, {
+        icon: L.divIcon({
+          className: 'officer-marker',
+          html: '<div style="font-size: 35px;">🛡️</div>',
+          iconSize: [35, 35],
+          iconAnchor: [17, 35]
+        })
+      }).addTo(map);
+      officerMarker.bindPopup('You<br/>Your Location');
+    }
+    
+    // Add route polyline if officer location is available
+    if (routeCoords && routeCoords.length === 2) {
+      const routePolyline = L.polyline(routeCoords, {
+        color: '#3b82f6',
+        weight: 4,
+        opacity: 0.7,
+        dashArray: '10, 10'
+      }).addTo(map);
+    }
+    
+    // Fit map to show both markers if officer location is available
+    if (officerLoc) {
+      const group = new L.featureGroup([userMarker, officerMarker]);
+      map.fitBounds(group.getBounds().pad(0.2));
+    } else {
+      map.setView(userLoc, 15);
+    }
+  </script>
+</body>
+</html>
+  `;
+};

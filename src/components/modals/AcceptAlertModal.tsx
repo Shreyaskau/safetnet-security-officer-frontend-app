@@ -69,15 +69,15 @@ export const AcceptAlertModal: React.FC<AcceptAlertModalProps> = ({
                 style={styles.profileImage}
               />
               <View style={styles.userInfo}>
-                <Text style={styles.userName}>{alert.user_name}</Text>
+                <Text style={styles.userName}>{alert.user_name || 'Unknown User'}</Text>
                 <Text style={styles.userLocation}>
-                  📍 {alert.location.address}
+                  📍 {alert.location?.address || 'Location not available'}
                 </Text>
-                {distance && (
-                  <Text style={styles.distance}>{distance} mi away</Text>
+                {distance !== null && distance !== undefined && (
+                  <Text style={styles.distance}>{distance.toFixed(1)} mi away</Text>
                 )}
                 <Text style={styles.time}>
-                  ⏰ {formatRelativeTime(alert.timestamp)}
+                  ⏰ {alert.timestamp ? formatRelativeTime(alert.timestamp) : 'Just now'}
                 </Text>
               </View>
             </View>
@@ -90,7 +90,7 @@ export const AcceptAlertModal: React.FC<AcceptAlertModalProps> = ({
               </Text>
             </View>
 
-            {estimatedArrival && (
+            {estimatedArrival !== null && estimatedArrival !== undefined && estimatedArrival > 0 && (
               <View style={styles.etaContainer}>
                 <Text style={styles.etaLabel}>Estimated Arrival</Text>
                 <Text style={styles.etaValue}>~{estimatedArrival} minutes</Text>

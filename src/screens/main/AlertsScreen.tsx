@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { AlertCard } from '../../components/alerts/AlertCard';
 import { AlertStats } from '../../components/alerts/AlertStats';
 import { EmptyState } from '../../components/common/EmptyState';
@@ -19,10 +20,17 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { Alert } from '../../types/alert.types';
 import { colors, typography, spacing } from '../../utils';
 
-export const AlertsScreen = ({ navigation }: any) => {
+export const AlertsScreen = ({ navigation, route }: any) => {
   const { alerts, refreshing, filter, refreshAlerts, changeFilter } = useAlerts();
   const { socket } = useSocket();
   const { isOffline } = useNetworkStatus();
+
+  // Handle route params to set initial filter (e.g., when navigating from Dashboard "See All" with filter param)
+  React.useEffect(() => {
+    if (route?.params?.filter) {
+      changeFilter(route.params.filter);
+    }
+  }, [route?.params?.filter]);
 
   React.useEffect(() => {
     if (isOffline) {
@@ -66,11 +74,11 @@ export const AlertsScreen = ({ navigation }: any) => {
             navigation.navigate('Settings');
           }}
         >
-          <Text style={styles.menuIcon}>⚙️</Text>
+          <Icon name="settings" size={24} color={colors.darkText} />
         </TouchableOpacity>
         <Text style={styles.title}>ALERTS</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-          <Text style={styles.bellIcon}>🔔</Text>
+          <Icon name="search" size={24} color={colors.darkText} />
         </TouchableOpacity>
       </View>
 
@@ -119,7 +127,7 @@ export const AlertsScreen = ({ navigation }: any) => {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <EmptyState
-            icon="🚨"
+            icon="notifications"
             title="No Active Alerts"
             description="All clear! No new alerts at the moment."
           />

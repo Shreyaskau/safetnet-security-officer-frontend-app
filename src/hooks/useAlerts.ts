@@ -22,11 +22,37 @@ export const useAlerts = () => {
 
     dispatch(setLoading(true));
     try {
-      const data = await alertService.getAlerts(
+      let data: Alert[] = [];
+      
+      // Use appropriate API endpoint based on filter (similar to getAlertLogs)
+      // For completed/resolved alerts, use resolved endpoint
+      // For active/pending alerts, use active endpoint
+      // For all/emergency/normal, use list endpoint
+      if (filter === 'completed' || filter === 'resolved') {
+        // Use getAlertLogs for completed/resolved alerts
+        const response = await alertService.getAlertLogs(
+          officer.security_id,
+          'completed',
+          officer.name
+        );
+        data = Array.isArray(response) ? response : (response.data || []);
+      } else if (filter === 'pending' || filter === 'active') {
+        // Use getAlertLogs for active/pending alerts
+        const response = await alertService.getAlertLogs(
         officer.security_id,
-        officer.geofence_id,
-        officer.name // Pass officer name to use for alerts created by this officer
+          'active',
+          officer.name
       );
+        data = Array.isArray(response) ? response : (response.data || []);
+      } else {
+        // Use regular getAlerts for all/emergency/normal filters
+        data = await alertService.getAlerts(
+          officer.security_id,
+          officer.geofence_id,
+          officer.name // Pass officer name to use for alerts created by this officer
+        );
+      }
+      
       dispatch(setAlerts(data || []));
       dispatch(setLoading(false));
     } catch (error: any) {
@@ -91,7 +117,7 @@ export const useAlerts = () => {
     // Refresh alerts every 30 seconds
     const interval = setInterval(fetchAlerts, 30000);
     return () => clearInterval(interval);
-  }, [officer]);
+  }, [officer, filter]); // Add filter as dependency to refetch when filter changes
 
   return {
     alerts: filteredAlerts,

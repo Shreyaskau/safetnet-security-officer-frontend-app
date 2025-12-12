@@ -28,6 +28,14 @@ export const alertService = {
     // Transform API response to match Alert interface structure
     // Backend might return location_lat/location_long instead of location object
     return alerts.map((alert: any) => {
+      // Ensure ID fields exist - SOS API might use 'id' instead of 'log_id'
+      if (!alert.log_id && alert.id) {
+        alert.log_id = alert.id;
+      }
+      if (!alert.id && alert.log_id) {
+        alert.id = alert.log_id;
+      }
+      
       // Ensure location structure exists
       if (!alert.location && (alert.location_lat || alert.location_long)) {
         alert.location = {
@@ -77,8 +85,13 @@ export const alertService = {
     // Use documented SOS endpoint
     // PATCH /api/security/sos/{id}/ - Update SOS alert (accept it)
     const alertId = payload.log_id;
+    
+    if (!alertId) {
+      throw new Error('Alert ID is required to accept alert');
+    }
+
     const response = await axiosInstance.patch(
-      API_ENDPOINTS.UPDATE_SOS.replace('{id}', alertId),
+      API_ENDPOINTS.UPDATE_SOS.replace('{id}', String(alertId)),
       {
         status: 'accepted',
         security_id: payload.security_id,
@@ -99,7 +112,7 @@ export const alertService = {
     const response = await axiosInstance.patch(
       API_ENDPOINTS.RESOLVE_SOS.replace('{id}', logId),
       {
-        security_id: securityId,
+      security_id: securityId,
         status: status || 'resolved',
       }
     );

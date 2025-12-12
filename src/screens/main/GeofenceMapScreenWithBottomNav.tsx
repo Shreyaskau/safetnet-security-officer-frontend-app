@@ -1,13 +1,13 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { LogsScreen } from './LogsScreen';
+import { GeofenceMapScreen } from './GeofenceMapScreen';
 import { BottomTabNavigator } from '../../components/navigation/BottomTabNavigator';
 import { colors } from '../../utils';
 
-export const LogsScreenWithBottomNav = ({ navigation, route }: any) => {
+export const GeofenceMapScreenWithBottomNav = ({ navigation }: any) => {
   return (
     <View style={styles.container}>
-      <LogsScreen navigation={navigation} route={route} />
+      <GeofenceMapScreen navigation={navigation} />
       <BottomTabNavigator />
     </View>
   );
@@ -16,7 +16,7 @@ export const LogsScreenWithBottomNav = ({ navigation, route }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.lightGrayBg,
+    backgroundColor: colors.white,
   },
 });
 

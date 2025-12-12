@@ -7,22 +7,22 @@ import apiConfig from './config';
 const getBaseURL = () => {
   // Priority 1: Check environment variable (for deployment flexibility)
   // This allows you to set API_BASE_URL in .env file or build configuration
-  if (Config.API_BASE_URL) {
-    let url = Config.API_BASE_URL.trim();
+    if (Config.API_BASE_URL) {
+      let url = Config.API_BASE_URL.trim();
     // Remove trailing slash
     if (url.endsWith('/')) {
       url = url.slice(0, -1);
-    }
+      }
     // Add /api/security if not already included (without trailing slash)
-    if (!url.includes('/api/security')) {
+      if (!url.includes('/api/security')) {
       url += '/api/security';
-    }
+      }
     // Ensure no trailing slash (endpoints will start with /)
     if (url.endsWith('/')) {
       url = url.slice(0, -1);
     }
-    return url;
-  }
+      return url;
+    }
   
   // Priority 2: Use BASE_URL from config.ts and append /api/security (no trailing slash)
   const baseUrl = apiConfig.BASE_URL;
@@ -41,7 +41,7 @@ const apiClient = axios.create({
     "Content-Type": "application/json",
     "Accept": "application/json",
   },
-  timeout: 60000, // Increased timeout for Render (free tier can be slow)
+  timeout: 90000, // 90 seconds - Render free tier can take 30-90s to wake up from sleep
   validateStatus: function (status) {
     return status < 500; // Don't throw error for 4xx status codes
   },
@@ -188,7 +188,7 @@ export const loginOfficer = async (username: string, password: string) => {
     // Make API request - use longer timeout for Render free tier
     const endpoint = "/login/";
     const res = await apiClient.post(endpoint, requestData, {
-      timeout: 15000, // 15 second timeout - Render free tier can take 10-30s to wake up
+      timeout: 60000, // 60 second timeout - Render free tier can take 10-60s to wake up
     });
 
     const responseData = res.data;
@@ -209,7 +209,7 @@ export const loginOfficer = async (username: string, password: string) => {
     if (!accessToken) {
       throw new Error("Access token not received from server");
     }
-
+    
     // Save tokens in background (non-blocking) - return immediately
     setToken(accessToken).catch(() => {}); // Fire and forget
     if (refreshToken) {

@@ -2,22 +2,40 @@ import Geolocation from 'react-native-geolocation-service';
 import { Location } from '../types/location.types';
 import { locationService } from '../api/services/locationService';
 import { requestLocationPermission } from '../utils/permissions';
-import { requestLocationPermission } from '../utils/permissions';
 
 export class LocationService {
   private watchId: number | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
+  private securityId: string | null = null;
+  private geofenceId: string | null = null;
 
   async startTracking(
     securityId: string,
     geofenceId: string,
     onLocationUpdate?: (location: Location) => void
   ) {
+    // Store IDs for cleanup
+    this.securityId = securityId;
+    this.geofenceId = geofenceId;
+
     // Request permission first
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
       console.error('Location permission denied');
       return;
+    }
+
+    // Start live location session on backend
+    try {
+      // Default duration: 60 minutes (1 hour) - can be extended if needed
+      await locationService.startLiveLocation(securityId, geofenceId, 60);
+    } catch (error: any) {
+      // Log 400 errors (validation issues) and other errors, but suppress 404
+      if (error?.response?.status === 400) {
+        console.error('[LocationService] Validation error starting live location:', error?.response?.data || error?.message || error);
+      } else if (error?.response?.status !== 404) {
+        console.warn('[LocationService] Could not start live location session:', error?.message || error);
+      }
     }
 
     this.watchId = Geolocation.watchPosition(
@@ -32,14 +50,19 @@ export class LocationService {
           timestamp: position.timestamp,
         };
 
-        // Update server every 5 seconds
+        // Update server every 5 seconds (silently fail on 404 - endpoint may not exist)
         if (this.updateInterval === null) {
           this.updateInterval = setInterval(() => {
-            locationService.updateLocation(securityId, location, geofenceId).catch(
-              (err) => {
-                console.error('Error updating location:', err);
-              }
-            );
+            if (this.securityId && this.geofenceId) {
+              locationService.updateLocation(this.securityId, location, this.geofenceId).catch(
+                (err: any) => {
+                  // Only log non-404 errors
+                  if (err?.response?.status !== 404) {
+                    console.error('Error updating location:', err);
+                  }
+                }
+              );
+            }
           }, 5000);
         }
 
@@ -58,26 +81,61 @@ export class LocationService {
     );
   }
 
-  stopTracking() {
+  async stopTracking() {
+    // Stop GPS tracking
     if (this.watchId !== null) {
       Geolocation.clearWatch(this.watchId);
       this.watchId = null;
     }
+    
+    // Clear update interval
     if (this.updateInterval !== null) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
     }
+
+    // Stop live location session on backend
+    if (this.securityId) {
+      try {
+        await locationService.stopLiveLocation(this.securityId);
+      } catch (error: any) {
+        // Only log non-404 errors
+        if (error?.response?.status !== 404) {
+          console.warn('[LocationService] Error stopping live location session:', error?.message || error);
+        }
+      }
+      this.securityId = null;
+      this.geofenceId = null;
+    }
   }
 
   async getCurrentLocation(): Promise<Location> {
-    // Request permission first
+    // Check if Geolocation is available
+    if (!Geolocation || typeof Geolocation.getCurrentPosition !== 'function') {
+      throw new Error(
+        'Location service not available. This may be due to:\n' +
+        '1. App needs to be rebuilt\n' +
+        '2. Native module not properly linked\n' +
+        '3. Device location services disabled\n\n' +
+        'Please rebuild the app and ensure location services are enabled.'
+      );
+    }
+
+    // Request permission first (with device location services check)
     const hasPermission = await requestLocationPermission();
     if (!hasPermission) {
-      throw new Error('Location permission denied');
+      throw new Error(
+        'Location permission denied or location services disabled.\n\n' +
+        'Please:\n' +
+        '1. Enable Location Services (GPS) in Device Settings\n' +
+        '2. Grant location permission to the app\n' +
+        '3. Try again'
+      );
     }
 
     // Use callback-based API for better compatibility
     const position = await new Promise<Geolocation.GeoPosition>((resolve, reject) => {
+      try {
       Geolocation.getCurrentPosition(
         (pos) => {
           // Validate position object
@@ -98,6 +156,9 @@ export class LocationService {
           forceRequestLocation: true,
         }
       );
+      } catch (error) {
+        reject(new Error(`Location service error: ${error.message || 'Native module not available'}`));
+      }
     });
 
     // Validate position before accessing coords

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   ScrollView,
@@ -6,47 +6,21 @@ import {
   Text,
   TouchableOpacity,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { AlertCard } from '../../components/alerts/AlertCard';
 import { BottomTabNavigator } from '../../components/navigation/BottomTabNavigator';
 import { useAlerts } from '../../hooks/useAlerts';
 import { Alert } from '../../types/alert.types';
 import { colors, typography, spacing } from '../../utils';
-import { useAppSelector } from '../../redux/hooks';
-import { alertService } from '../../api/services/alertService';
-
 export const DashboardScreen = ({ navigation }: any) => {
   const { alerts } = useAlerts();
-  const [recentLogs, setRecentLogs] = useState<Alert[]>([]);
-  const officer = useAppSelector((state) => state.auth.officer);
-
-  // Fetch logs when officer is available
-  useEffect(() => {
-    if (officer) {
-      fetchRecentLogs();
-    }
-  }, [officer]);
-
-  const fetchRecentLogs = async () => {
-    if (!officer) return;
-    try {
-      const data = await alertService.getAlertLogs(officer.security_id, 'normal', officer.name);
-      // Get 4 most recent logs
-      const logs = data.data || [];
-      setRecentLogs(logs.slice(0, 4));
-    } catch (error: any) {
-      // On error, set empty array instead of sample data
-      setRecentLogs([]);
-    }
-  };
 
   const handleRespond = (alert: Alert) => {
     navigation.navigate('AlertResponse', { alert });
   };
 
-  // Use sample data if no real alerts
-      // Use only real data, no sample data fallback
-      const displayAlerts = alerts;
-      const displayLogs = recentLogs;
+  // Use only real data, no sample data fallback
+  const displayAlerts = alerts;
 
   const stats = {
     active: displayAlerts.filter((a) => a.status === 'pending' || a.status === 'accepted').length,
@@ -65,11 +39,11 @@ export const DashboardScreen = ({ navigation }: any) => {
             navigation.navigate('Settings');
           }}
         >
-          <Text style={styles.menuIcon}>⚙️</Text>
+          <Icon name="settings" size={24} color={colors.darkText} />
         </TouchableOpacity>
         <Text style={styles.title}>HOME</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-          <Text style={styles.bellIcon}>🔔</Text>
+          <Icon name="search" size={24} color={colors.darkText} />
         </TouchableOpacity>
       </View>
 
@@ -133,46 +107,6 @@ export const DashboardScreen = ({ navigation }: any) => {
                 <Text style={styles.emptyIcon}>🛡️</Text>
                 <Text style={styles.emptyText}>No recent alerts</Text>
                 <Text style={styles.emptySubtext}>All clear! No new alerts at the moment.</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Recent Logs Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderContainer}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <View style={[styles.iconContainer, styles.logsIconContainer]}>
-                  <Text style={styles.sectionIcon}>📋</Text>
-                </View>
-                <View>
-                  <Text style={styles.sectionTitle}>Recent Logs</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    {recentLogs.length > 0 ? `${recentLogs.length} entries` : 'No logs'}
-                  </Text>
-                </View>
-              </View>
-              <TouchableOpacity 
-                style={styles.seeAllButton}
-                onPress={() => navigation.navigate('Logs')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.seeAllText}>See All</Text>
-                <Text style={styles.seeAllArrow}>→</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.cardsContainer}>
-            {displayLogs.length > 0 ? (
-              displayLogs.map((log) => (
-                <AlertCard key={log.id} alert={log} onRespond={() => {}} />
-              ))
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyIcon}>📝</Text>
-                <Text style={styles.emptyText}>No recent logs</Text>
-                <Text style={styles.emptySubtext}>Your activity history will appear here.</Text>
               </View>
             )}
           </View>
@@ -305,9 +239,6 @@ const styles = StyleSheet.create({
   },
   alertsIconContainer: {
     backgroundColor: '#FEE2E2',
-  },
-  logsIconContainer: {
-    backgroundColor: '#DBEAFE',
   },
   sectionIcon: {
     fontSize: 24,

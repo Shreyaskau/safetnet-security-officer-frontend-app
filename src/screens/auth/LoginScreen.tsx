@@ -91,13 +91,17 @@ export const LoginScreen = () => {
       console.error("Error status:", err.response && err.response.status ? err.response.status : 'unknown');
       
       const status = err.response && err.response.status ? err.response.status : undefined;
+      const isNetworkError = err.code === 'ERR_NETWORK' || err.message === 'Network Error' || !err.response;
       let errorMessage = 'Invalid Credentials';
       
-      if (status === 502) {
+      // Handle network errors (no response from server)
+      if (isNetworkError) {
+        errorMessage = 'Cannot reach server. The backend service may be sleeping (Render free tier takes 30-90 seconds to wake up). Please wait 1-2 minutes and try again.';
+      } else if (status === 502) {
         // Bad Gateway - Render service is down or sleeping
-        errorMessage = 'Backend service is not responding. The service may be sleeping (Render free tier takes 2-3 minutes to wake up). Please wait and try again, or check Render dashboard.';
+        errorMessage = 'Backend service is not responding. The service may be sleeping (Render free tier takes 30-90 seconds to wake up). Please wait and try again, or check Render dashboard.';
       } else if (status === 503) {
-        errorMessage = 'Service temporarily unavailable. The server is starting up or overloaded. Please wait 2-3 minutes and try again.';
+        errorMessage = 'Service temporarily unavailable. The server is starting up or overloaded. Please wait 1-2 minutes and try again.';
       } else if (status === 400) {
         // 400 Bad Request - show backend's specific error message
         // Handle Django REST Framework error formats

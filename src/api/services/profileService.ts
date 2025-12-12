@@ -18,10 +18,20 @@ export const profileService = {
       } as SecurityOfficer;
     }
 
-    const response = await axiosInstance.post(API_ENDPOINTS.GET_PROFILE, {
-      security_id: securityId,
-    });
-    return response.data;
+    try {
+      console.log('[ProfileService] Fetching profile for security_id:', securityId);
+      // Use GET for profile endpoint (standard REST)
+      const response = await axiosInstance.get(API_ENDPOINTS.GET_PROFILE);
+      console.log('[ProfileService] Profile API Response:', JSON.stringify(response.data, null, 2));
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('[ProfileService] Error fetching profile:', error);
+      if (error?.response) {
+        console.error('[ProfileService] Error response:', error.response.status, error.response.data);
+      }
+      throw error;
+    }
   },
 
   updateProfile: async (securityId: string, updates: Partial<SecurityOfficer>) => {

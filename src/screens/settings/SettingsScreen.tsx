@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Switch,
   ActivityIndicator,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useAppSelector, useAppDispatch } from '../../redux/hooks';
 import {
@@ -19,6 +21,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { logout } from '../../redux/slices/authSlice';
 import { colors, typography, spacing } from '../../utils';
 import { testConnection, getAPIConfig, ConnectionStatus } from '../../api/services/connectionTestService';
+import { requestLocationPermission } from '../../utils/permissions';
 
 export const SettingsScreen = ({ navigation }: any) => {
   const dispatch = useAppDispatch();
@@ -51,6 +54,37 @@ export const SettingsScreen = ({ navigation }: any) => {
       });
     } finally {
       setIsTestingConnection(false);
+    }
+  };
+
+  const handleLocationTrackingToggle = async (value: boolean) => {
+    if (value) {
+      // When enabling location tracking, request permission first
+      const granted = await requestLocationPermission();
+      if (granted) {
+        dispatch(setLocationTrackingEnabled(true));
+      } else {
+        // Permission denied - show alert
+        Alert.alert(
+          'Location Permission Required',
+          'Location permission is required for the map to show your current location. Please grant permission in your device settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Open Settings', 
+              onPress: () => {
+                // On Android, you can open app settings
+                if (Platform.OS === 'android') {
+                  // Linking.openSettings(); // Would need to import Linking
+                }
+              }
+            }
+          ]
+        );
+      }
+    } else {
+      // Just disable tracking if user turns it off
+      dispatch(setLocationTrackingEnabled(false));
     }
   };
 
@@ -89,14 +123,12 @@ export const SettingsScreen = ({ navigation }: any) => {
           <View style={styles.settingLeft}>
             <Text style={styles.settingLabel}>Location Tracking</Text>
             <Text style={styles.settingDescription}>
-              Allow app to track your location
+              Allow app to track your location for maps and alerts
             </Text>
           </View>
           <Switch
             value={settings.locationTrackingEnabled}
-            onValueChange={(value) =>
-              dispatch(setLocationTrackingEnabled(value))
-            }
+            onValueChange={handleLocationTrackingToggle}
             trackColor={{
               false: colors.mediumGray,
               true: colors.primary,
@@ -104,6 +136,31 @@ export const SettingsScreen = ({ navigation }: any) => {
             thumbColor={colors.white}
           />
         </View>
+
+        <TouchableOpacity
+          style={styles.settingButton}
+          onPress={async () => {
+            const granted = await requestLocationPermission();
+            if (granted) {
+              Alert.alert('Success', 'Location permission granted! The map can now show your current location.');
+              dispatch(setLocationTrackingEnabled(true));
+            } else {
+              Alert.alert(
+                'Permission Denied',
+                'Location permission is required for the Leaflet map. Please grant permission in your device settings.',
+                [{ text: 'OK' }]
+              );
+            }
+          }}
+        >
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingLabel}>Request Location Permission</Text>
+            <Text style={styles.settingDescription}>
+              Grant permission for Leaflet map to access your location
+            </Text>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -163,9 +220,9 @@ export const SettingsScreen = ({ navigation }: any) => {
 
         <TouchableOpacity
           style={styles.settingButton}
-          onPress={() => navigation.navigate('Logs')}
+          onPress={() => navigation.navigate('Alerts', { filter: 'completed' })}
         >
-          <Text style={styles.settingButtonText}>📋 Logs</Text>
+          <Text style={styles.settingButtonText}>📋 Alerts History</Text>
           <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
 

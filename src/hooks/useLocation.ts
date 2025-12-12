@@ -53,14 +53,17 @@ export const useLocation = () => {
           setError(null);
           dispatch(setLocationError(null));
 
-          // Update server
+          // Update server (silently fail on 404 - endpoint may not exist)
           if (officer) {
             locationService.updateLocation(
               officer.security_id,
               newLocation,
               officer.geofence_id
-            ).catch((err) => {
-              console.error('Error updating location:', err);
+            ).catch((err: any) => {
+              // Only log non-404 errors
+              if (err?.response?.status !== 404) {
+                console.error('Error updating location:', err);
+              }
             });
           }
         },

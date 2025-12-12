@@ -64,8 +64,9 @@ export const API_ENDPOINTS = {
 
   // ==================== LEGACY/ADDITIONAL (not in documented API) ====================
   // These are kept for backward compatibility or may be used by frontend
-  UPDATE_LOCATION: '/api/security/location/', // May map to live_location
-  GET_USER_LOCATION: '/api/security/location/',
+  // NOTE: These endpoints may not exist - use live_location endpoints instead
+  UPDATE_LOCATION: '/api/security/live_location/', // Maps to live_location
+  GET_USER_LOCATION: '/api/security/live_location/', // User location might be in SOS alert data
   GET_GEOFENCE_DETAILS: '/api/security/geofence/',
   GET_USERS_IN_AREA: '/api/security/geofence/users/',
   SEND_BROADCAST: '/api/security/broadcast/',

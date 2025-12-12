@@ -2,11 +2,10 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { DashboardScreen } from '../screens/main/DashboardScreen';
 import { ProfileScreen } from '../screens/main/ProfileScreen';
-import { LogsScreen } from '../screens/main/LogsScreen';
-import { LogsScreenWithBottomNav } from '../screens/main/LogsScreenWithBottomNav';
 import { AlertsScreenWithBottomNav } from '../screens/main/AlertsScreenWithBottomNav';
 import { ProfileScreenWithBottomNav } from '../screens/main/ProfileScreenWithBottomNav';
 import { GeofenceMapScreen } from '../screens/main/GeofenceMapScreen';
+import { GeofenceMapScreenWithBottomNav } from '../screens/main/GeofenceMapScreenWithBottomNav';
 import { BroadcastScreen } from '../screens/main/BroadcastScreen';
 import { AlertResponseScreen } from '../screens/main/AlertResponseScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
@@ -18,6 +17,7 @@ import { OfflineScreen } from '../screens/common/OfflineScreen';
 import { DashboardScreenWithBottomNav } from '../screens/main/DashboardScreen';
 import SOSPage from '../components/common/SOSPage';
 import { APITestScreen } from '../screens/test/APITestScreen';
+import LeafletMapScreen from '../screens/LeafletMapScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -42,12 +42,8 @@ export const MainNavigator = () => {
         component={ProfileScreenWithBottomNav}
       />
       <Stack.Screen
-        name="Logs"
-        component={LogsScreenWithBottomNav}
-      />
-      <Stack.Screen
         name="GeofenceArea"
-        component={GeofenceMapScreen}
+        component={GeofenceMapScreenWithBottomNav}
       />
       <Stack.Screen
         name="Broadcast"
@@ -84,6 +80,10 @@ export const MainNavigator = () => {
       <Stack.Screen
         name="APITest"
         component={APITestScreen}
+      />
+      <Stack.Screen
+        name="LeafletMap"
+        component={LeafletMapScreen}
       />
     </Stack.Navigator>
   );

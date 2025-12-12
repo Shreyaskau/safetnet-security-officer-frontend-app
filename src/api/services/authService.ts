@@ -58,6 +58,10 @@ export const authService = {
         await storage.setItem(constants.STORAGE_KEYS.ROLE, djangoResponse.user.role);
       }
 
+      // Log full login response for debugging
+      console.log('[AuthService] Login response:', JSON.stringify(djangoResponse, null, 2));
+      console.log('[AuthService] Geofence ID from login:', djangoResponse.user?.geofence_id);
+
       // Convert Django response to legacy format for compatibility
       const legacyResponse: LoginResponse = {
         result: 'success',
@@ -67,7 +71,11 @@ export const authService = {
         email_id: djangoResponse.user.email || djangoResponse.user.username,
         mobile: djangoResponse.user.mobile || '',
         security_role: djangoResponse.user.role || 'security_officer',
-        geofence_id: djangoResponse.user.geofence_id || '',
+        // Handle geofence_id from different possible locations in response
+        geofence_id: djangoResponse.user.geofence_id?.toString() || 
+                     djangoResponse.geofence_id?.toString() || 
+                     djangoResponse.user.security_officer?.geofence_id?.toString() || 
+                     '',
         user_image: djangoResponse.user.user_image || '',
         status: djangoResponse.user.status || 'active',
         // Include Django format fields
@@ -75,6 +83,8 @@ export const authService = {
         refresh: djangoResponse.refresh,
         user: djangoResponse.user,
       };
+
+      console.log('[AuthService] Mapped geofence_id:', legacyResponse.geofence_id);
 
       return legacyResponse;
     }
