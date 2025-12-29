@@ -17,6 +17,7 @@ import { OfflineScreen } from '../screens/common/OfflineScreen';
 import { DashboardScreenWithBottomNav } from '../screens/main/DashboardScreen';
 import SOSPage from '../components/common/SOSPage';
 import { APITestScreen } from '../screens/test/APITestScreen';
+import { UpdateProfileScreen } from '../screens/main/UpdateProfileScreen';
 import LeafletMapScreen from '../screens/LeafletMapScreen';
 
 const Stack = createNativeStackNavigator();
@@ -64,6 +65,10 @@ export const MainNavigator = () => {
       <Stack.Screen
         name="AlertResponse"
         component={AlertResponseScreen}
+      />
+      <Stack.Screen
+        name="UpdateProfile"
+        component={UpdateProfileScreen}
       />
       <Stack.Screen
         name="Search"

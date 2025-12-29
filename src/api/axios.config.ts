@@ -65,11 +65,30 @@ axiosInstance.interceptors.response.use(
     // Handle 404 errors gracefully - don't spam console
     if (error.response && error.response.status === 404) {
       const endpoint = `${error.config?.method?.toUpperCase()} ${error.config?.url}`;
-      // Only log 404 once per endpoint
-      if (!logged404Endpoints.has(endpoint)) {
+      
+      // Skip logging for optional endpoints that may not exist on backend
+      const optionalEndpoints = [
+        '/api/security/logout/',
+        '/api/security/password-reset/',
+        '/api/security/token/refresh/',
+        '/api/security/geofence/', // Geofence endpoints may not be implemented
+        '/api/geofence/', // Alternative geofence endpoints
+      ];
+      
+      // Also check if URL contains geofence (to catch all geofence endpoint variations)
+      const isGeofenceEndpoint = error.config?.url?.includes('/geofence');
+      
+      const isOptionalEndpoint = optionalEndpoints.some(opt => 
+        error.config?.url?.includes(opt)
+      );
+      
+      // Suppress 404 warnings for geofence endpoints (they're being tried but may not exist)
+      // Only log 404 once per endpoint, and skip optional/geofence endpoints
+      if (!isOptionalEndpoint && !isGeofenceEndpoint && !logged404Endpoints.has(endpoint)) {
         console.warn(`[API] Endpoint not found (404): ${endpoint} - Using fallback data`);
         logged404Endpoints.add(endpoint);
       }
+      // Geofence endpoints are silently ignored (no warning spam)
       // Don't log the full HTML response for 404s - it's just noise
     } else if (error.response) {
       // Server responded with error status (non-404)

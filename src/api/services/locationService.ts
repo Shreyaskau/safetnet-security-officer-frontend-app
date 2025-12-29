@@ -6,6 +6,9 @@ import { ENABLE_API_CALLS } from '../config';
 // Store active live location session ID per security officer
 const activeSessions: Map<string, string> = new Map();
 
+// Track ongoing session start requests to prevent race conditions
+const pendingSessionStarts: Map<string, Promise<string | null>> = new Map();
+
 export const locationService = {
   /**
    * Start a live location sharing session
@@ -24,72 +27,89 @@ export const locationService = {
       return { result: 'success', session_id: 'mock-session-id', msg: 'Live location started (mock mode)' };
     }
 
+    // Check if a session start is already in progress for this officer
+    const existingStart = pendingSessionStarts.get(securityId);
+    if (existingStart) {
+      console.log('[Location] Session start already in progress for:', securityId, '- waiting...');
+      try {
+        const sessionId = await existingStart;
+        if (sessionId) {
+          return { result: 'success', session_id: sessionId, msg: 'Live location started (reused)' };
+        }
+      } catch (error) {
+        // If existing start failed, continue to create new one
+        pendingSessionStarts.delete(securityId);
+      }
+    }
+
+    // Create a promise for this session start
+    const startPromise = (async (): Promise<string | null> => {
+      try {
+        const response = await axiosInstance.post(
+          API_ENDPOINTS.START_LIVE_LOCATION,
+          {
+            security_id: securityId,
+            geofence_id: geofenceId,
+            duration_minutes: durationMinutes,
+          }
+        );
+        
+        // Extract session ID from response
+        const sessionId = 
+          response.data?.session?.id ||
+          response.data?.session?.session_id ||
+          response.data?.session_id ||
+          response.data?.id ||
+          response.data?.data?.session_id ||
+          response.data?.data?.id ||
+          null;
+        
+        console.log('[Location] Start live location response:', JSON.stringify(response.data, null, 2));
+        console.log('[Location] Extracted session ID:', sessionId);
+        
+        if (sessionId) {
+          const sessionIdStr = String(sessionId);
+          const oldSessionId = activeSessions.get(securityId);
+          if (oldSessionId && oldSessionId !== sessionIdStr) {
+            console.log('[Location] Replacing old session ID:', oldSessionId, 'with new:', sessionIdStr);
+          }
+          activeSessions.set(securityId, sessionIdStr);
+          console.log('[Location] Stored session ID:', sessionIdStr, 'for security officer:', securityId);
+          pendingSessionStarts.delete(securityId);
+          return sessionIdStr;
+        }
+        
+        if (response.status >= 200 && response.status < 300) {
+          console.warn('[Location] Session ID not found in response');
+          const tempSessionId = `temp_${securityId}_${Date.now()}`;
+          activeSessions.set(securityId, tempSessionId);
+          pendingSessionStarts.delete(securityId);
+          return tempSessionId;
+        }
+        
+        pendingSessionStarts.delete(securityId);
+        return null;
+      } catch (error: any) {
+        if (error?.response?.status === 400) {
+          console.error('[Location] Validation error starting live location:', error?.response?.data || error?.message);
+        } else if (error?.response?.status !== 404) {
+          console.warn('[Location] Error starting live location:', error?.message || error);
+        }
+        pendingSessionStarts.delete(securityId);
+        throw error;
+      }
+    })();
+    
+    // Store the promise so other calls can wait for it
+    pendingSessionStarts.set(securityId, startPromise);
+    
     try {
-      const response = await axiosInstance.post(
-        API_ENDPOINTS.START_LIVE_LOCATION,
-        {
-          security_id: securityId,
-          geofence_id: geofenceId,
-          duration_minutes: durationMinutes, // Required field
-        }
-      );
-      
-      // Extract session ID from response - prioritize session.id based on actual backend response
-      const sessionId = 
-        response.data?.session?.id ||           // Primary: Backend returns session.id = 74
-        response.data?.session?.session_id ||   // Alternative session structure
-        response.data?.session_id ||            // Direct session_id
-        response.data?.id ||                    // Direct id
-        response.data?.data?.session_id ||      // Nested data.session_id
-        response.data?.data?.id ||              // Nested data.id
-        null;
-      
-      // Log response and extracted session ID for debugging
-      console.log('[Location] Start live location response:', JSON.stringify(response.data, null, 2));
-      console.log('[Location] Extracted session ID:', sessionId);
-      
+      const sessionId = await startPromise;
       if (sessionId) {
-        // Store session ID for this security officer (convert to string)
-        const sessionIdStr = String(sessionId);
-        // Clear any old session ID before storing new one
-        const oldSessionId = activeSessions.get(securityId);
-        if (oldSessionId && oldSessionId !== sessionIdStr) {
-          console.log('[Location] Replacing old session ID:', oldSessionId, 'with new:', sessionIdStr);
-        }
-        activeSessions.set(securityId, sessionIdStr);
-        console.log('[Location] Stored session ID:', sessionIdStr, 'for security officer:', securityId);
-        return { result: 'success', session_id: sessionIdStr, data: response.data };
+        return { result: 'success', session_id: sessionId, data: null };
       }
-      
-      // If no session ID found but response is successful (200/201), 
-      // try to continue anyway - maybe the backend uses a different approach
-      if (response.status >= 200 && response.status < 300) {
-        console.warn('[Location] Session ID not found in response, but request succeeded. Response:', response.data);
-        // Generate a temporary session ID based on security ID
-        const tempSessionId = `temp_${securityId}_${Date.now()}`;
-        activeSessions.set(securityId, tempSessionId);
-        return { result: 'success', session_id: tempSessionId, data: response.data };
-      }
-      
-      throw new Error('Session ID not found in response');
-    } catch (error: any) {
-      // Log 400 errors (validation issues) and other errors, but suppress 404 (endpoint not available)
-      if (error?.response?.status === 400) {
-        console.error('[Location] Validation error starting live location:', error?.response?.data || error?.message || error);
-      } else if (error?.response?.status !== 404) {
-        console.warn('[Location] Error starting live location:', error?.message || error);
-        // Log full error response for debugging
-        if (error?.response?.data) {
-          console.log('[Location] Error response data:', JSON.stringify(error.response.data, null, 2));
-        }
-      }
-      // Don't throw error if it's a session ID issue and we can continue with temp session
-      if (error?.message === 'Session ID not found in response') {
-        // Generate a temporary session ID to continue
-        const tempSessionId = `temp_${securityId}_${Date.now()}`;
-        activeSessions.set(securityId, tempSessionId);
-        return { result: 'success', session_id: tempSessionId, data: null };
-      }
+      throw new Error('Session start failed - no session ID returned');
+    } catch (error) {
       throw error;
     }
   },

@@ -21,12 +21,14 @@ const getBaseURL = () => {
     if (url.endsWith('/')) {
       url = url.slice(0, -1);
     }
+      console.log(`[API Config] Using base URL from .env: ${url}`);
       return url;
     }
   
   // Priority 2: Use BASE_URL from config.ts and append /api/security (no trailing slash)
   const baseUrl = apiConfig.BASE_URL;
   const apiUrl = `${baseUrl}/api/security`;
+  console.log(`[API Config] Using base URL from config: ${apiUrl}`);
   return apiUrl;
   
   // For local development, create .env file with:
@@ -177,8 +179,19 @@ export const initializeToken = async () => {
 // --------------------------------------
 // 🔐 LOGIN API (You just added this in backend)
 // --------------------------------------
-export const loginOfficer = async (username: string, password: string) => {
+export const loginOfficer = async (username: string, password: string, retryCount: number = 0): Promise<any> => {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAYS = [2000, 5000, 10000]; // 2s, 5s, 10s delays
+  
   try {
+    // Log the base URL for debugging
+    const baseURL = apiClient.defaults.baseURL;
+    if (retryCount === 0) {
+      console.log(`[Login] Attempting to connect to: ${baseURL}/login/`);
+    } else {
+      console.log(`[Login] Retry attempt ${retryCount}/${MAX_RETRIES}...`);
+    }
+    
     // Trim whitespace and prepare request
     const requestData = { 
       username: username.trim(), 
@@ -188,7 +201,7 @@ export const loginOfficer = async (username: string, password: string) => {
     // Make API request - use longer timeout for Render free tier
     const endpoint = "/login/";
     const res = await apiClient.post(endpoint, requestData, {
-      timeout: 60000, // 60 second timeout - Render free tier can take 10-60s to wake up
+      timeout: 120000, // 120 seconds - Render free tier can take up to 2-3 minutes to wake up
     });
 
     const responseData = res.data;
@@ -218,7 +231,26 @@ export const loginOfficer = async (username: string, password: string) => {
 
     return responseData;
   } catch (error: any) {
-    // Simplified error handling (fast, minimal logging)
+    // Check if it's a network error and we should retry
+    const isNetworkError = !error.response && (
+      error.code === 'ERR_NETWORK' || 
+      error.message?.includes('Network Error') ||
+      error.message?.includes('timeout')
+    );
+    
+    // Retry logic for network errors (Render free tier wake-up)
+    if (isNetworkError && retryCount < MAX_RETRIES) {
+      const delay = RETRY_DELAYS[retryCount] || 10000;
+      console.log(`[Login] Network error detected. Retrying in ${delay/1000}s... (Attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Retry the request
+      return loginOfficer(username, password, retryCount + 1);
+    }
+    
+    // Handle response errors
     if (error.response) {
       const status = error.response.status;
       if (status === 400) {
@@ -231,6 +263,16 @@ export const loginOfficer = async (username: string, password: string) => {
         throw new Error("Server error. Please try again later.");
       }
     }
+    
+    // Handle network errors after retries exhausted
+    if (isNetworkError) {
+      throw new Error(
+        "Unable to connect to server. " +
+        "The backend service may be starting up (Render free tier takes 2-3 minutes). " +
+        "Please wait a moment and try again."
+      );
+    }
+    
     throw error;
   }
 };
@@ -303,3 +345,57 @@ export const getNavigation = () => apiClient.get("/navigation/");
 // 📜 INCIDENTS
 // --------------------------------------
 export const listIncidents = () => apiClient.get("/incidents/");
+
+// --------------------------------------
+// 🔍 CONNECTION TEST
+// --------------------------------------
+/**
+ * Test backend connection
+ * Returns true if connection is successful, false otherwise
+ */
+export const testConnection = async (): Promise<{ success: boolean; message: string; url?: string }> => {
+  try {
+    const baseURL = apiClient.defaults.baseURL;
+    const testUrl = `${baseURL}/login/`;
+    
+    console.log(`[Connection Test] Testing: ${testUrl}`);
+    
+    // Try a simple GET request (will likely return 405 Method Not Allowed, but that means server is reachable)
+    const response = await apiClient.get("/login/", {
+      timeout: 10000, // 10 second timeout for connection test
+      validateStatus: () => true, // Accept any status code
+    });
+    
+    // If we get any response (even 405), server is reachable
+    if (response.status !== undefined) {
+      return {
+        success: true,
+        message: `Server is reachable (Status: ${response.status})`,
+        url: testUrl,
+      };
+    }
+    
+    return {
+      success: false,
+      message: "Server responded but with unexpected format",
+      url: testUrl,
+    };
+  } catch (error: any) {
+    const baseURL = apiClient.defaults.baseURL;
+    const testUrl = `${baseURL}/login/`;
+    
+    if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      return {
+        success: false,
+        message: `Cannot reach server at ${testUrl}. Check if URL is correct and server is running.`,
+        url: testUrl,
+      };
+    }
+    
+    return {
+      success: false,
+      message: error.message || "Connection test failed",
+      url: testUrl,
+    };
+  }
+};

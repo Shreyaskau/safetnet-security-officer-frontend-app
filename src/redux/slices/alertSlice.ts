@@ -32,9 +32,16 @@ const alertSlice = createSlice({
       state.unreadCount += 1;
     },
     updateAlert: (state, action: PayloadAction<Alert>) => {
-      const index = state.alerts.findIndex(a => a.id === action.payload.id);
+      const alertId = action.payload.id || action.payload.log_id;
+      const index = state.alerts.findIndex(a => 
+        (a.id === alertId) || (a.log_id === alertId) || 
+        (a.id === action.payload.id) || (a.log_id === action.payload.log_id)
+      );
       if (index !== -1) {
         state.alerts[index] = action.payload;
+      } else {
+        // If alert not found, add it (might be a new alert)
+        state.alerts.push(action.payload);
       }
     },
     setActiveAlert: (state, action: PayloadAction<Alert | null>) => {

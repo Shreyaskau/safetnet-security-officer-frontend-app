@@ -6,9 +6,9 @@
 export const API_ENDPOINTS = {
   // ==================== AUTHENTICATION ====================
   LOGIN: '/api/security/login/',
-  LOGOUT: '/api/security/logout/', // Not in documented list but keeping for compatibility
-  REFRESH_TOKEN: '/api/security/token/refresh/', // Not in documented list but keeping for compatibility
-  FORGOT_PASSWORD: '/api/security/password-reset/', // Not in documented list but keeping for compatibility
+  LOGOUT: '/api/security/logout/', // Optional - may not exist on backend (404 is handled gracefully)
+  REFRESH_TOKEN: '/api/security/token/refresh/', // Optional - may not exist on backend (404 is handled gracefully)
+  FORGOT_PASSWORD: '/api/security/password-reset/', // Password reset - sends email to user
 
   // ==================== PROFILE ====================
   GET_PROFILE: '/api/security/profile/',
@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
   LIST_SOS: '/api/security/sos/',
   GET_SOS: '/api/security/sos/{id}/',
   UPDATE_SOS: '/api/security/sos/{id}/', // PATCH/PUT
+  DELETE_SOS: '/api/security/sos/{id}/', // DELETE
   RESOLVE_SOS: '/api/security/sos/{id}/resolve/', // PATCH
   GET_ACTIVE_SOS: '/api/security/sos/active/',
   GET_RESOLVED_SOS: '/api/security/sos/resolved/',

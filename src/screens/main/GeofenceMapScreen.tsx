@@ -1,13 +1,16 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 import Geolocation from 'react-native-geolocation-service';
 import { useAppSelector } from '../../redux/hooks';
 import { useLocation } from '../../hooks/useLocation';
 import { geofenceService } from '../../api/services/geofenceService';
 import { profileService } from '../../api/services/profileService';
+import { useAlerts } from '../../hooks/useAlerts';
+// Removed local data fallback - using only actual backend data
 import { MapControls } from '../../components/maps/MapControls';
 import { colors, typography, spacing } from '../../utils';
+import { isPointInPolygon } from '../../utils/helpers';
 import { GeofenceArea } from '../../types/location.types';
 import { updateOfficerProfile } from '../../redux/slices/authSlice';
 import { useAppDispatch } from '../../redux/hooks';
@@ -17,9 +20,11 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
   const officer = useAppSelector((state) => state.auth.officer);
   const dispatch = useAppDispatch();
   const { location } = useLocation();
+  const { allAlerts } = useAlerts(); // Get actual alert data from backend
   const [geofence, setGeofence] = useState<GeofenceArea | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(location);
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number; accuracy?: number } | null>(location);
+  const [wasInsideGeofence, setWasInsideGeofence] = useState<boolean | null>(null); // Track previous state for entry/exit detection
   const webViewRef = useRef(null);
   const watchIdRef = useRef<number | null>(null);
 
@@ -54,6 +59,8 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       }
       
       setGeofence(data);
+      // Reset geofence entry state when geofence changes
+      setWasInsideGeofence(null);
     } catch (error: any) {
       // Handle errors gracefully
       console.error('[GeofenceMap] Full error object:', error);
@@ -70,6 +77,9 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
         setGeofence(null);
       } else {
         console.error('[GeofenceMap] Error fetching geofence:', error.message || error);
+        
+        // Log error details for debugging
+        console.error('[GeofenceMap] Error fetching geofence from backend:', error.message || error);
         console.error('[GeofenceMap] Error stack:', error.stack);
         setGeofence(null);
       }
@@ -110,12 +120,12 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                                  String(geofenceId).trim() !== '';
 
       if (!isValidGeofenceId) {
-        console.warn('[GeofenceMap] Cannot fetch geofence - missing or invalid geofence_id', {
+        // Only log as info, not warning, since we'll try to fetch from profile
+        console.log('[GeofenceMap] No geofence_id in officer object, will fetch from profile', {
           hasOfficer: !!officer,
           hasGeofenceId: !!geofenceId,
           geofenceIdValue: geofenceId,
           geofenceIdType: typeof geofenceId,
-          isValid: isValidGeofenceId
         });
         
         // Try to fetch profile to get geofence_id if missing
@@ -133,7 +143,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                                    (profile as any)?.officer_id?.toString() ||  // Sometimes officer_id is geofence_id
                                    '';
             
-            // If no ID found, check for geofence name and map to ID
+            // If no ID found, check for geofence name and try to fetch by name
             if (!profileGeofenceId || profileGeofenceId === '') {
               const geofenceName = (profile as any)?.officer_geofence || 
                                  (profile as any)?.geofence_name || 
@@ -142,21 +152,18 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               
               if (geofenceName) {
                 console.log('[GeofenceMap] Found geofence name in profile:', geofenceName);
-                // Map known geofence names to IDs (based on user's earlier info)
-                // "Pune PCMC Area" = ID "4"
-                const geofenceNameToIdMap: Record<string, string> = {
-                  'Pune PCMC Area': '4',
-                  'Pune PCMC': '4',
-                };
                 
-                profileGeofenceId = geofenceNameToIdMap[geofenceName] || '';
-                
-                if (profileGeofenceId) {
-                  console.log('[GeofenceMap] Mapped geofence name to ID:', geofenceName, '->', profileGeofenceId);
-                } else {
-                  console.warn('[GeofenceMap] Geofence name found but not in mapping:', geofenceName);
-                  // Try using the name directly as ID (some APIs might accept names)
-                  // But first, let's try to see if the geofence API can handle names
+                // Try to fetch geofence using the name directly (some APIs accept names)
+                try {
+                  console.log('[GeofenceMap] Attempting to fetch geofence by name:', geofenceName);
+                  const geofenceData = await geofenceService.getGeofenceDetails(geofenceName);
+                  console.log('[GeofenceMap] ✅ Successfully fetched geofence by name:', geofenceName);
+                  setGeofence(geofenceData);
+                  setIsLoading(false);
+                  return;
+                } catch (nameError: any) {
+                  console.log('[GeofenceMap] Fetching by name failed, will try fallback:', nameError?.message);
+                  // Continue to fallback logic below
                 }
               }
             }
@@ -170,7 +177,37 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               }, 500);
               return;
             } else {
-              console.warn('[GeofenceMap] Profile fetched but geofence_id still not found. Profile data:', JSON.stringify(profile, null, 2));
+              // If no geofence_id found, check if we have a geofence name
+              const geofenceName = (profile as any)?.officer_geofence || 
+                                 (profile as any)?.geofence_name || 
+                                 (profile as any)?.assigned_geofence?.name ||
+                                 '';
+              
+              if (geofenceName) {
+                console.log('[GeofenceMap] No geofence_id found, but geofence name exists:', geofenceName);
+                console.log('[GeofenceMap] Attempting to fetch geofence using name...');
+                
+                // Try fetching geofence by name
+                try {
+                  const geofenceData = await geofenceService.getGeofenceDetails(geofenceName);
+                  console.log('[GeofenceMap] ✅ Successfully fetched geofence using name');
+                  setGeofence(geofenceData);
+                  setIsLoading(false);
+                  return;
+                } catch (error: any) {
+                  // Backend API failed - log error and show no geofence
+                  console.error('[GeofenceMap] Failed to fetch geofence from backend:', error.message || error);
+                  if (error.response) {
+                    console.error('[GeofenceMap] Backend response status:', error.response.status);
+                    console.error('[GeofenceMap] Backend response data:', error.response.data);
+                  }
+                  setGeofence(null);
+                  setIsLoading(false);
+                  return;
+                }
+              } else {
+                console.warn('[GeofenceMap] Profile fetched but geofence_id and geofence name not found');
+              }
             }
           } catch (error) {
             console.error('[GeofenceMap] Error fetching profile:', error);
@@ -228,15 +265,50 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               const newLocation = {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy || undefined,
               };
               
               setCurrentLocation(newLocation);
               
-              // Update map marker
+              // Check if officer entered/exited geofence area
+              if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
+                const isInside = isPointInPolygon(newLocation, geofence.coordinates);
+                
+                // Check if state changed (entered or exited)
+                if (wasInsideGeofence !== null && wasInsideGeofence !== isInside) {
+                  if (isInside && !wasInsideGeofence) {
+                    // Officer entered the geofence area
+                    Alert.alert(
+                      '✅ Area Entered',
+                      `You have entered your allocated area: ${geofence.name || 'Geofence Area'}`,
+                      [{ text: 'OK', style: 'default' }],
+                      { cancelable: true }
+                    );
+                    console.log('[GeofenceMap] ✅ Officer entered geofence area:', geofence.name);
+                  } else if (!isInside && wasInsideGeofence) {
+                    // Officer exited the geofence area
+                    Alert.alert(
+                      '⚠️ Area Exited',
+                      `You have left your allocated area: ${geofence.name || 'Geofence Area'}`,
+                      [{ text: 'OK', style: 'default' }],
+                      { cancelable: true }
+                    );
+                    console.log('[GeofenceMap] ⚠️ Officer exited geofence area:', geofence.name);
+                  }
+                }
+                
+                setWasInsideGeofence(isInside);
+              } else if (wasInsideGeofence === null) {
+                // Initialize state if geofence is not loaded yet
+                setWasInsideGeofence(false);
+              }
+              
+              // Update map marker with accuracy
               if (webViewRef.current) {
+                const accuracy = position.coords.accuracy || 50; // Default to 50m if not available
                 const script = `
                   if (window.updateUserLocation) {
-                    window.updateUserLocation(${newLocation.latitude}, ${newLocation.longitude});
+                    window.updateUserLocation(${newLocation.latitude}, ${newLocation.longitude}, ${accuracy});
                   }
                 `;
                 webViewRef.current.injectJavaScript(script);
@@ -247,10 +319,10 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
             console.warn('[GeofenceMap] Location tracking error:', error);
           },
           {
-            enableHighAccuracy: true,
-            distanceFilter: 10,
-            interval: 5000,
-            fastestInterval: 2000,
+            enableHighAccuracy: true, // Use GPS for best accuracy
+            distanceFilter: 5, // Update every 5 meters for better accuracy
+            interval: 3000, // Update every 3 seconds
+            fastestInterval: 1000, // Fastest update interval (1 second)
             showLocationDialog: true,
             forceRequestLocation: true,
           }
@@ -301,8 +373,32 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               weight: 2
             }).addTo(map);
             
-            // Fit map to geofence bounds
-            map.fitBounds(window.geofencePolygonLayer.getBounds());
+            // Expand bounds by 200 meters to show surrounding area
+            const bounds = window.geofencePolygonLayer.getBounds();
+            const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+            const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+            
+            // 200m in degrees: approximately 0.0018 degrees latitude
+            // For longitude, it varies by latitude: 0.0018 / cos(latitude)
+            const latOffset = 0.0018; // ~200m
+            const lngOffset = 0.0018 / Math.cos(centerLat * Math.PI / 180); // ~200m adjusted for latitude
+            
+            // Expand bounds by 1km in all directions
+            const expandedBounds = L.latLngBounds(
+              [bounds.getSouth() - latOffset, bounds.getWest() - lngOffset],
+              [bounds.getNorth() + latOffset, bounds.getEast() + lngOffset]
+            );
+            
+            // Fit map to expanded bounds
+            map.fitBounds(expandedBounds, {
+              padding: [20, 20], // Small padding for UI elements
+              maxZoom: 15 // Maximum zoom level
+            });
+            
+            // Ensure minimum zoom level for better context
+            if (map.getZoom() > 15) {
+              map.setZoom(15);
+            }
             console.log('Geofence polygon added and map fitted to bounds');
           }
         }
@@ -358,27 +454,36 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                                        (profile as any)?.officer_id?.toString() ||
                                        '';
                 
-                // If no ID found, check for geofence name and map to ID
+                // If no ID found, check for geofence name and try to fetch by name
                 if (!profileGeofenceId || profileGeofenceId === '') {
                   const geofenceName = (profile as any)?.officer_geofence || 
                                      (profile as any)?.geofence_name || 
                                      (profile as any)?.assigned_geofence?.name ||
                                      '';
                   
-                  if (geofenceName) {
-                    console.log('[GeofenceMap] Found geofence name in profile:', geofenceName);
-                    // Map known geofence names to IDs
-                    const geofenceNameToIdMap: Record<string, string> = {
-                      'Pune PCMC Area': '4',
-                      'Pune PCMC': '4',
-                    };
-                    
-                    profileGeofenceId = geofenceNameToIdMap[geofenceName] || '';
-                    
-                    if (profileGeofenceId) {
-                      console.log('[GeofenceMap] Mapped geofence name to ID:', geofenceName, '->', profileGeofenceId);
-                    }
+              if (geofenceName) {
+                console.log('[GeofenceMap] Found geofence name in profile:', geofenceName);
+                console.log('[GeofenceMap] Attempting to fetch geofence using name...');
+                
+                // Try fetching geofence by name directly
+                try {
+                  const geofenceData = await geofenceService.getGeofenceDetails(geofenceName);
+                  console.log('[GeofenceMap] ✅ Successfully fetched geofence by name');
+                  setGeofence(geofenceData);
+                  setIsLoading(false);
+                  return;
+                } catch (nameError: any) {
+                  // Backend API failed - log error
+                  console.error('[GeofenceMap] Failed to fetch geofence by name from backend:', nameError.message || nameError);
+                  if (nameError.response) {
+                    console.error('[GeofenceMap] Backend response status:', nameError.response.status);
+                    console.error('[GeofenceMap] Backend response data:', nameError.response.data);
                   }
+                  setGeofence(null);
+                  setIsLoading(false);
+                  return;
+                }
+              }
                 }
                 
                 if (profileGeofenceId && profileGeofenceId !== '' && profileGeofenceId !== '0') {
@@ -433,7 +538,32 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                     fillOpacity: 0.2,
                     weight: 2
                   }).addTo(map);
-                  map.fitBounds(polygon.getBounds());
+                  // Expand bounds by 200 meters to show surrounding area
+                  const bounds = polygon.getBounds();
+                  const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+                  const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+                  
+                  // 200m in degrees: approximately 0.0018 degrees latitude
+                  // For longitude, it varies by latitude: 0.0018 / cos(latitude)
+                  const latOffset = 0.0018; // ~200m
+                  const lngOffset = 0.0018 / Math.cos(centerLat * Math.PI / 180); // ~200m adjusted for latitude
+                  
+                  // Expand bounds by 1km in all directions
+                  const expandedBounds = L.latLngBounds(
+                    [bounds.getSouth() - latOffset, bounds.getWest() - lngOffset],
+                    [bounds.getNorth() + latOffset, bounds.getEast() + lngOffset]
+                  );
+                  
+                  // Fit map to expanded bounds
+                  map.fitBounds(expandedBounds, {
+                    padding: [20, 20], // Small padding for UI elements
+                    maxZoom: 15 // Maximum zoom level
+                  });
+                  
+                  // Ensure minimum zoom level for better context
+                  if (map.getZoom() > 15) {
+                    map.setZoom(15);
+                  }
                   console.log('Geofence polygon added:', geofenceCoords);
                 }
               }
@@ -500,13 +630,13 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
           <>
             <View style={styles.statsRow}>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🔴 3 Emergency</Text>
+                <Text style={styles.statText}>🔴 {allAlerts.filter((a) => a.priority === 'high').length} Emergency</Text>
               </View>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟡 5 Pending</Text>
+                <Text style={styles.statText}>🟡 {allAlerts.filter((a) => a.status === 'pending').length} Pending</Text>
               </View>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟢 45 Completed</Text>
+                <Text style={styles.statText}>🟢 {allAlerts.filter((a) => a.status === 'completed').length} Completed</Text>
               </View>
             </View>
             <TouchableOpacity style={styles.viewButton}>
@@ -529,7 +659,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
 const getLeafletMapHTML = (
   center: { lat: number; lng: number },
   geofence: GeofenceArea | null,
-  location: { latitude: number; longitude: number } | null
+  location: { latitude: number; longitude: number; accuracy?: number } | null
 ) => {
   // Log what we're generating
   console.log('[GeofenceMap] Generating map HTML:', {
@@ -564,6 +694,7 @@ const getLeafletMapHTML = (
   const userLocation = location 
     ? `[${location.latitude}, ${location.longitude}]`
     : 'null';
+  const userAccuracy = location?.accuracy || 50; // Default to 50 meters if not available
 
   return `
 <!DOCTYPE html>
@@ -583,8 +714,10 @@ const getLeafletMapHTML = (
     const center = [${center.lat}, ${center.lng}];
     const geofenceCoords = ${geofencePolygon};
     const userLoc = ${userLocation};
+    const userAccuracy = ${userAccuracy}; // GPS accuracy in meters
     
-    // Initialize map
+    // Initialize map with a reasonable zoom level
+    // Zoom level 13 shows good detail without being too close
     const map = L.map('map').setView(center, 13);
     
     // Add OpenStreetMap tile layer
@@ -602,13 +735,50 @@ const getLeafletMapHTML = (
         weight: 2
       }).addTo(map);
       
-      // Fit map to geofence bounds
-      map.fitBounds(geofencePolygon.getBounds());
+      // Expand bounds by 200 meters (approximately 0.0018 degrees) to show surrounding area
+      const bounds = geofencePolygon.getBounds();
+      const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+      const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+      
+      // 200m in degrees: approximately 0.0018 degrees latitude
+      // For longitude, it varies by latitude: 0.0018 / cos(latitude)
+      const latOffset = 0.0018; // ~200m
+      const lngOffset = 0.0018 / Math.cos(centerLat * Math.PI / 180); // ~200m adjusted for latitude
+      
+      // Expand bounds by 1km in all directions
+      const expandedBounds = L.latLngBounds(
+        [bounds.getSouth() - latOffset, bounds.getWest() - lngOffset],
+        [bounds.getNorth() + latOffset, bounds.getEast() + lngOffset]
+      );
+      
+      // Fit map to expanded bounds
+      map.fitBounds(expandedBounds, {
+        padding: [20, 20], // Small padding for UI elements
+        maxZoom: 15 // Maximum zoom level
+      });
+      
+      // Ensure minimum zoom level for better context
+      if (map.getZoom() > 15) {
+        map.setZoom(15);
+      }
     }
     
-    // Add user location marker if available
+    // Add user location marker and accuracy circle if available
     let userMarker = null;
+    let accuracyCircle = null;
     if (userLoc) {
+      // Add accuracy circle first (so marker appears on top)
+      accuracyCircle = L.circle(userLoc, {
+        radius: userAccuracy,
+        color: '#3B82F6',
+        fillColor: '#3B82F6',
+        fillOpacity: 0.1,
+        weight: 2,
+        dashArray: '5, 5'
+      }).addTo(map);
+      accuracyCircle.bindPopup('GPS Accuracy: ±' + Math.round(userAccuracy) + ' meters');
+      
+      // Add user location marker
       userMarker = L.marker(userLoc, {
         icon: L.divIcon({
           className: 'user-marker',
@@ -617,7 +787,7 @@ const getLeafletMapHTML = (
           iconAnchor: [15, 30]
         })
       }).addTo(map);
-      userMarker.bindPopup('Your Location');
+      userMarker.bindPopup('Your Location (Accuracy: ±' + Math.round(userAccuracy) + 'm)');
     }
     
     // Map control functions
@@ -637,14 +807,33 @@ const getLeafletMapHTML = (
       map.setView([lat, lng], map.getZoom());
     };
     
-    // Update user location marker
-    window.updateUserLocation = function(lat, lng) {
+    // Update user location marker and accuracy circle
+    window.updateUserLocation = function(lat, lng, accuracy) {
+      const newLocation = [lat, lng];
+      const accuracyRadius = accuracy || 50; // Default to 50m if not provided
+      
       if (userMarker) {
-        userMarker.setLatLng([lat, lng]);
-        map.panTo([lat, lng], { animate: true, duration: 1 });
+        userMarker.setLatLng(newLocation);
+        userMarker.setPopupContent('Your Location (Accuracy: ±' + Math.round(accuracyRadius) + 'm)');
       } else {
+        // Create accuracy circle if it doesn't exist
+        if (!accuracyCircle) {
+          accuracyCircle = L.circle(newLocation, {
+            radius: accuracyRadius,
+            color: '#3B82F6',
+            fillColor: '#3B82F6',
+            fillOpacity: 0.1,
+            weight: 2,
+            dashArray: '5, 5'
+          }).addTo(map);
+        } else {
+          accuracyCircle.setLatLng(newLocation);
+          accuracyCircle.setRadius(accuracyRadius);
+        }
+        accuracyCircle.setPopupContent('GPS Accuracy: ±' + Math.round(accuracyRadius) + ' meters');
+        
         // Create marker if it doesn't exist
-        userMarker = L.marker([lat, lng], {
+        userMarker = L.marker(newLocation, {
           icon: L.divIcon({
             className: 'user-marker',
             html: '<div style="font-size: 30px;">📍</div>',
@@ -652,8 +841,28 @@ const getLeafletMapHTML = (
             iconAnchor: [15, 30]
           })
         }).addTo(map);
-        userMarker.bindPopup('Your Location (Live)');
+        userMarker.bindPopup('Your Location (Live - Accuracy: ±' + Math.round(accuracyRadius) + 'm)');
       }
+      
+      // Update accuracy circle
+      if (accuracyCircle) {
+        accuracyCircle.setLatLng(newLocation);
+        accuracyCircle.setRadius(accuracyRadius);
+      } else {
+        // Create accuracy circle if it doesn't exist
+        accuracyCircle = L.circle(newLocation, {
+          radius: accuracyRadius,
+          color: '#3B82F6',
+          fillColor: '#3B82F6',
+          fillOpacity: 0.1,
+          weight: 2,
+          dashArray: '5, 5'
+        }).addTo(map);
+        accuracyCircle.bindPopup('GPS Accuracy: ±' + Math.round(accuracyRadius) + ' meters');
+      }
+      
+      // Optionally pan to location (commented out to avoid jarring movement)
+      // map.panTo(newLocation, { animate: true, duration: 1 });
     };
   </script>
 </body>

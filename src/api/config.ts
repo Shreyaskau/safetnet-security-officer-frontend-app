@@ -5,7 +5,8 @@
 export const ENABLE_API_CALLS = true; // Set to false to disable API calls and use mock data
 
 // Replace with your real Render URL, include the protocol
-const BACKEND_BASE_URL = 'https://safetnet-backend.onrender.com';
+// Deployed backend URL: https://safetnet.onrender.com
+const BACKEND_BASE_URL = 'https://safetnet.onrender.com';
 
 export default {
   BASE_URL: BACKEND_BASE_URL,
