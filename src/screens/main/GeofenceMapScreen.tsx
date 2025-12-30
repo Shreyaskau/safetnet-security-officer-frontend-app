@@ -33,7 +33,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
     if (!officer || !officer.geofence_id) {
       console.warn('[GeofenceMap] No officer or geofence_id available:', { 
         hasOfficer: !!officer, 
-        geofenceId: officer?.geofence_id,
+        geofenceId: officer ? officer.geofence_id : undefined,
         fullOfficer: officer
       });
       setIsLoading(false);
@@ -64,7 +64,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
     } catch (error: any) {
       // Handle errors gracefully
       console.error('[GeofenceMap] Full error object:', error);
-      if (error?.response) {
+      if (error && error.response) {
         console.error('[GeofenceMap] Error response status:', error.response.status);
         console.error('[GeofenceMap] Error response data:', JSON.stringify(error.response.data, null, 2));
       }
@@ -96,12 +96,12 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       // Log officer data for debugging
       console.log('[GeofenceMap] useEffect triggered - Officer data:', {
         hasOfficer: !!officer,
-        officerName: officer?.name,
-        geofence_id: officer?.geofence_id,
-        geofence_idType: typeof officer?.geofence_id,
-        geofence_idEmpty: !officer?.geofence_id || officer?.geofence_id === '',
-        geofence_idLength: officer?.geofence_id?.toString().length || 0,
-        security_id: officer?.security_id,
+        officerName: officer ? officer.name : undefined,
+        geofence_id: officer ? officer.geofence_id : undefined,
+        geofence_idType: officer ? typeof officer.geofence_id : undefined,
+        geofence_idEmpty: !officer || !officer.geofence_id || officer.geofence_id === '',
+        geofence_idLength: officer && officer.geofence_id ? officer.geofence_id.toString().length : 0,
+        security_id: officer ? officer.security_id : undefined,
         fullOfficer: officer ? JSON.stringify(officer, null, 2) : 'null'
       });
 
@@ -137,17 +137,18 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
             
             // Extract geofence_id from profile - handle multiple formats
             // Check for ID fields first
-            let profileGeofenceId = (profile as any)?.geofence_id || 
-                                   (profile as any)?.assigned_geofence?.id?.toString() ||
-                                   (profile as any)?.assigned_geofence_id?.toString() ||
-                                   (profile as any)?.officer_id?.toString() ||  // Sometimes officer_id is geofence_id
+            const profileAny = profile as any;
+            let profileGeofenceId = (profileAny && profileAny.geofence_id) || 
+                                   (profileAny && profileAny.assigned_geofence && profileAny.assigned_geofence.id ? profileAny.assigned_geofence.id.toString() : '') ||
+                                   (profileAny && profileAny.assigned_geofence_id ? profileAny.assigned_geofence_id.toString() : '') ||
+                                   (profileAny && profileAny.officer_id ? profileAny.officer_id.toString() : '') ||  // Sometimes officer_id is geofence_id
                                    '';
             
             // If no ID found, check for geofence name and try to fetch by name
             if (!profileGeofenceId || profileGeofenceId === '') {
-              const geofenceName = (profile as any)?.officer_geofence || 
-                                 (profile as any)?.geofence_name || 
-                                 (profile as any)?.assigned_geofence?.name ||
+              const geofenceName = (profileAny && profileAny.officer_geofence) || 
+                                 (profileAny && profileAny.geofence_name) || 
+                                 (profileAny && profileAny.assigned_geofence && profileAny.assigned_geofence.name) ||
                                  '';
               
               if (geofenceName) {
@@ -162,7 +163,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                   setIsLoading(false);
                   return;
                 } catch (nameError: any) {
-                  console.log('[GeofenceMap] Fetching by name failed, will try fallback:', nameError?.message);
+                  console.log('[GeofenceMap] Fetching by name failed, will try fallback:', nameError && nameError.message ? nameError.message : nameError);
                   // Continue to fallback logic below
                 }
               }
@@ -178,9 +179,9 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               return;
             } else {
               // If no geofence_id found, check if we have a geofence name
-              const geofenceName = (profile as any)?.officer_geofence || 
-                                 (profile as any)?.geofence_name || 
-                                 (profile as any)?.assigned_geofence?.name ||
+              const geofenceName = (profileAny && profileAny.officer_geofence) || 
+                                 (profileAny && profileAny.geofence_name) || 
+                                 (profileAny && profileAny.assigned_geofence && profileAny.assigned_geofence.name) ||
                                  '';
               
               if (geofenceName) {
@@ -303,12 +304,11 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                 setWasInsideGeofence(false);
               }
               
-              // Update map marker with accuracy
+              // Update map marker
               if (webViewRef.current) {
-                const accuracy = position.coords.accuracy || 50; // Default to 50m if not available
                 const script = `
                   if (window.updateUserLocation) {
-                    window.updateUserLocation(${newLocation.latitude}, ${newLocation.longitude}, ${accuracy});
+                    window.updateUserLocation(${newLocation.latitude}, ${newLocation.longitude}, 50);
                   }
                 `;
                 webViewRef.current.injectJavaScript(script);
@@ -319,12 +319,10 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
             console.warn('[GeofenceMap] Location tracking error:', error);
           },
           {
-            enableHighAccuracy: true, // Use GPS for best accuracy
-            distanceFilter: 5, // Update every 5 meters for better accuracy
-            interval: 3000, // Update every 3 seconds
-            fastestInterval: 1000, // Fastest update interval (1 second)
+            enableHighAccuracy: false,
+            distanceFilter: 10, // Update every 10 meters
+            interval: 5000, // Update every 5 seconds
             showLocationDialog: true,
-            forceRequestLocation: true,
           }
         );
       } catch (error) {
@@ -450,17 +448,18 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                 const profile = await profileService.getProfile(officer.security_id);
                 
                 // Extract geofence_id from profile - handle multiple formats
-                let profileGeofenceId = (profile as any)?.geofence_id || 
-                                       (profile as any)?.assigned_geofence?.id?.toString() ||
-                                       (profile as any)?.assigned_geofence_id?.toString() ||
-                                       (profile as any)?.officer_id?.toString() ||
+                const profileAnyRefresh = profile as any;
+                let profileGeofenceId = (profileAnyRefresh && profileAnyRefresh.geofence_id) || 
+                                       (profileAnyRefresh && profileAnyRefresh.assigned_geofence && profileAnyRefresh.assigned_geofence.id ? profileAnyRefresh.assigned_geofence.id.toString() : '') ||
+                                       (profileAnyRefresh && profileAnyRefresh.assigned_geofence_id ? profileAnyRefresh.assigned_geofence_id.toString() : '') ||
+                                       (profileAnyRefresh && profileAnyRefresh.officer_id ? profileAnyRefresh.officer_id.toString() : '') ||
                                        '';
                 
                 // If no ID found, check for geofence name and try to fetch by name
                 if (!profileGeofenceId || profileGeofenceId === '') {
-                  const geofenceName = (profile as any)?.officer_geofence || 
-                                     (profile as any)?.geofence_name || 
-                                     (profile as any)?.assigned_geofence?.name ||
+                  const geofenceName = (profileAnyRefresh && profileAnyRefresh.officer_geofence) || 
+                                     (profileAnyRefresh && profileAnyRefresh.geofence_name) || 
+                                     (profileAnyRefresh && profileAnyRefresh.assigned_geofence && profileAnyRefresh.assigned_geofence.name) ||
                                      '';
                   
               if (geofenceName) {
@@ -677,7 +676,7 @@ const getLeafletMapHTML = (
   
   // Handle coordinates - check if they're already in [lat, lng] format or {latitude, longitude} format
   let geofencePolygon = '[]';
-  if (geofence?.coordinates && geofence.coordinates.length > 0) {
+  if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
     try {
       // Check if coordinates are in array format [lat, lng] or object format {latitude, longitude}
       const firstCoord = geofence.coordinates[0];
