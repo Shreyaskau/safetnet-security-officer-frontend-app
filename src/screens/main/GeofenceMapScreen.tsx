@@ -25,7 +25,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
   const [isLoading, setIsLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number; accuracy?: number } | null>(location);
   const [wasInsideGeofence, setWasInsideGeofence] = useState<boolean | null>(null); // Track previous state for entry/exit detection
-  const webViewRef = useRef(null);
+  const webViewRef = useRef<any>(null);
   const watchIdRef = useRef<number | null>(null);
 
   // Define fetchGeofence before useEffect so it's available
@@ -47,7 +47,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       console.log('[GeofenceMap] Geofence fetched successfully:', {
         name: data.name,
         geofence_id: data.geofence_id,
-        coordinatesCount: data.coordinates?.length || 0,
+        coordinatesCount: data.coordinates.length || 0,
         hasCenter: !!data.center,
         center: data.center,
         fullData: data
@@ -113,11 +113,11 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
 
       // Check for valid geofence_id (not empty, not '0', not 0)
       const geofenceId = officer.geofence_id;
+      const geofenceIdStr = String(geofenceId || '');
       const isValidGeofenceId = geofenceId && 
-                                 geofenceId !== '' && 
-                                 geofenceId !== '0' && 
-                                 geofenceId !== 0 &&
-                                 String(geofenceId).trim() !== '';
+                                 geofenceIdStr !== '' && 
+                                 geofenceIdStr !== '0' &&
+                                 geofenceIdStr.trim() !== '';
 
       if (!isValidGeofenceId) {
         // Only log as info, not warning, since we'll try to fetch from profile
@@ -406,7 +406,9 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       
       // Wait a bit for map to be ready
       setTimeout(() => {
-        webViewRef.current?.injectJavaScript(script);
+        if (webViewRef.current) {
+          webViewRef.current.injectJavaScript(script);
+        }
       }, 300);
     } else if (webViewRef.current && currentLocation) {
       const center = getMapCenter();
@@ -515,7 +517,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       {/* Leaflet Map */}
       <WebView
         ref={webViewRef}
-        key={`map-${geofence?.geofence_id || 'no-geofence'}-${isLoading ? 'loading' : 'loaded'}`}
+        key={`map-${geofence && geofence.geofence_id ? geofence.geofence_id : 'no-geofence'}-${isLoading ? 'loading' : 'loaded'}`}
         source={{ html: getLeafletMapHTML(mapCenter, geofence, currentLocation) }}
         style={styles.map}
         javaScriptEnabled={true}
@@ -569,7 +571,9 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               }
             `;
             setTimeout(() => {
-              webViewRef.current?.injectJavaScript(script);
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(script);
+              }
             }, 500);
           }
         }}
@@ -662,13 +666,14 @@ const getLeafletMapHTML = (
   location: { latitude: number; longitude: number; accuracy?: number } | null
 ) => {
   // Log what we're generating
-  console.log('[GeofenceMap] Generating map HTML:', {
-    center,
-    hasGeofence: !!geofence,
-    geofenceName: geofence?.name,
-    coordinatesCount: geofence?.coordinates?.length || 0,
-    hasLocation: !!location
-  });
+    // Log what we're generating
+    console.log('[GeofenceMap] Generating map HTML:', {
+      center,
+      hasGeofence: !!geofence,
+      geofenceName: geofence ? geofence.name : undefined,
+      coordinatesCount: geofence && geofence.coordinates ? geofence.coordinates.length : 0,
+      hasLocation: !!location
+    });
   
   // Handle coordinates - check if they're already in [lat, lng] format or {latitude, longitude} format
   let geofencePolygon = '[]';
@@ -694,7 +699,7 @@ const getLeafletMapHTML = (
   const userLocation = location 
     ? `[${location.latitude}, ${location.longitude}]`
     : 'null';
-  const userAccuracy = location?.accuracy || 50; // Default to 50 meters if not available
+  const userAccuracy = location ? (location.accuracy || 50) : 50; // Default to 50 meters if not available
 
   return `
 <!DOCTYPE html>
