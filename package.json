@@ -8,7 +8,8 @@
     "ios": "react-native run-ios",
     "start": "react-native start",
     "test": "jest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "build": "echo 'ERROR: This is a React Native mobile application and cannot be built for web deployment. Please build Android APK/AAB or iOS IPA instead. See README.md for deployment instructions.' && exit 1"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
