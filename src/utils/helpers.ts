@@ -8,6 +8,20 @@ export const formatRelativeTime = (timestamp: string | Date): string => {
 };
 
 /**
+ * Format timestamp to exact date and time (e.g., "Dec 22, 2025 11:30 AM")
+ */
+export const formatExactTime = (timestamp: string | Date): string => {
+  return moment(timestamp).format('MMM DD, YYYY hh:mm A');
+};
+
+/**
+ * Format timestamp to exact time only (e.g., "11:30 AM")
+ */
+export const formatExactTimeOnly = (timestamp: string | Date): string => {
+  return moment(timestamp).format('hh:mm A');
+};
+
+/**
  * Calculate distance between two coordinates (Haversine formula)
  * Returns distance in miles
  */
@@ -67,6 +81,39 @@ export const getAlertTypeColor = (type: string): string => {
     default:
       return '#94A3B8';
   }
+};
+
+/**
+ * Check if a point is inside a polygon using ray casting algorithm
+ * @param point - The point to check { latitude, longitude }
+ * @param polygon - Array of polygon vertices [{ latitude, longitude }, ...]
+ * @returns true if point is inside polygon, false otherwise
+ */
+export const isPointInPolygon = (
+  point: { latitude: number; longitude: number },
+  polygon: Array<{ latitude: number; longitude: number }>
+): boolean => {
+  if (!polygon || polygon.length < 3) {
+    return false;
+  }
+
+  let inside = false;
+  const { latitude: lat, longitude: lng } = point;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].longitude;
+    const yi = polygon[i].latitude;
+    const xj = polygon[j].longitude;
+    const yj = polygon[j].latitude;
+
+    const intersect =
+      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersect) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
 };
 
 

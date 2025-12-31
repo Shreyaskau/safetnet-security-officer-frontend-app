@@ -78,7 +78,7 @@ export const DashboardScreen = ({ navigation }: any) => {
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleContainer}>
                 <View style={[styles.iconContainer, styles.alertsIconContainer]}>
-                  <Text style={styles.sectionIcon}>🚨</Text>
+                  <Icon name="notifications" size={24} color={colors.emergencyRed} />
                 </View>
                 <View>
                   <Text style={styles.sectionTitle}>Recent Alerts</Text>

@@ -107,16 +107,21 @@ export const authService = {
     }
 
     try {
-      // Django REST API logout
+      // Django REST API logout (endpoint may not exist - that's OK)
       await axiosInstance.post(API_ENDPOINTS.LOGOUT, {
         // Django might not require body, but we send it for compatibility
+      }, {
+        validateStatus: (status) => status < 500, // Accept 404 as OK
       });
-    } catch (error) {
-      // Even if logout fails on server, clear local storage
-      console.log('Logout API call failed, clearing local storage anyway');
+    } catch (error: any) {
+      // 404 is expected if endpoint doesn't exist - silently handle it
+      // Only log non-404 errors
+      if (error.response?.status !== 404) {
+        console.log('Logout API call failed, clearing local storage anyway');
+      }
     }
 
-    // Clear all storage
+    // Clear all storage regardless of API response
     await storage.clear();
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('refresh_token');
@@ -134,23 +139,70 @@ export const authService = {
       };
     }
 
-    // Django REST API forgot password
-    const response = await axiosInstance.post(API_ENDPOINTS.FORGOT_PASSWORD, {
-      email,
-    });
-    
-    // Django might return different format, convert to legacy format
-    if (response.data) {
-      return {
-        result: 'success',
-        msg: response.data.message || response.data.detail || 'Password reset link sent to your email',
-      };
+    try {
+      // Django REST API forgot password - call the actual backend endpoint
+      const response = await axiosInstance.post(API_ENDPOINTS.FORGOT_PASSWORD, {
+        email: email.trim().toLowerCase(),
+      });
+      
+      // Handle successful response (200, 201, etc.)
+      if (response.status >= 200 && response.status < 300) {
+        // Django might return different formats, handle all common ones
+        const message = response.data?.message || 
+                       response.data?.detail || 
+                       response.data?.msg ||
+                       'Password reset link sent to your email';
+        
+        return {
+          result: 'success',
+          msg: message,
+        };
+      }
+      
+      // Unexpected status code
+      throw new Error('Unexpected response from server');
+    } catch (error: any) {
+      // Handle specific error cases
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+        
+        // 404 - Endpoint doesn't exist
+        if (status === 404) {
+          throw new Error('Password reset endpoint not found. Please contact support.');
+        }
+        
+        // 400 - Bad request (e.g., email not found, invalid email)
+        if (status === 400) {
+          const errorMsg = data?.email?.[0] || 
+                          data?.non_field_errors?.[0] || 
+                          data?.detail || 
+                          data?.message ||
+                          'Invalid email address or email not found';
+          throw new Error(errorMsg);
+        }
+        
+        // 500 - Server error
+        if (status >= 500) {
+          throw new Error('Server error. Please try again later.');
+        }
+        
+        // Other 4xx errors
+        const errorMsg = data?.detail || 
+                        data?.message || 
+                        data?.error ||
+                        'Failed to send password reset link';
+        throw new Error(errorMsg);
+      }
+      
+      // Network error or other issues
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('Network')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      
+      // Re-throw other errors
+      throw error;
     }
-    
-    return {
-      result: 'success',
-      msg: 'Password reset link sent to your email',
-    };
   },
 
   // Refresh JWT token

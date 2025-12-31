@@ -26,7 +26,7 @@ export const broadcastSchema = yup.object().shape({
     .required('Message is required'),
   alertType: yup
     .string()
-    .oneOf(['general', 'warning', 'all_clear'], 'Invalid alert type')
+    .oneOf(['general', 'warning', 'emergency'], 'Invalid alert type')
     .required('Alert type is required'),
 });
 

@@ -21,7 +21,7 @@ import { Alert } from '../../types/alert.types';
 import { colors, typography, spacing } from '../../utils';
 
 export const AlertsScreen = ({ navigation, route }: any) => {
-  const { alerts, refreshing, filter, refreshAlerts, changeFilter } = useAlerts();
+  const { alerts, allAlerts, refreshing, filter, refreshAlerts, changeFilter, deleteAlert, closeAlert } = useAlerts();
   const { socket } = useSocket();
   const { isOffline } = useNetworkStatus();
 
@@ -47,24 +47,51 @@ export const AlertsScreen = ({ navigation, route }: any) => {
     navigation.navigate('AlertResponse', { alert });
   };
 
+  const handleDelete = async (alert: Alert) => {
+    try {
+      await deleteAlert(alert.id || alert.log_id);
+    } catch (error: any) {
+      console.error('Error deleting alert:', error);
+    }
+  };
+
+  const handleSolve = async (alert: Alert) => {
+    try {
+      const alertId = alert.log_id || alert.id;
+      if (!alertId) {
+        console.error('Alert ID not found');
+        return;
+      }
+      await closeAlert(alertId, 'completed');
+      // Alert status is updated immediately and will appear in "Completed" filter
+      // The alert list will refresh automatically
+      console.log('[AlertsScreen] Alert marked as completed, refreshing list...');
+    } catch (error: any) {
+      console.error('Error solving alert:', error);
+    }
+  };
+
   // Use only real alerts, no sample data
   const displayAlerts = alerts;
+  
+  // Calculate stats from ALL alerts (not filtered) to show accurate counts
+  const allAlertsForStats = allAlerts || alerts;
 
   const stats = {
-    active: displayAlerts.filter((a) => a.status === 'pending' || a.status === 'accepted').length,
-    pending: displayAlerts.filter((a) => a.status === 'pending').length,
-    resolved: displayAlerts.filter((a) => a.status === 'completed').length,
+    active: allAlertsForStats.filter((a) => a.status === 'pending' || a.status === 'accepted').length,
+    pending: allAlertsForStats.filter((a) => a.status === 'pending').length,
+    resolved: allAlertsForStats.filter((a) => a.status === 'completed').length,
   };
 
   const filters = [
     { key: 'all' as const, label: 'All Alerts' },
     { key: 'emergency' as const, label: 'Emergency' },
-    { key: 'normal' as const, label: 'Normal' },
+    { key: 'normal' as const, label: 'Accepted' },
     { key: 'pending' as const, label: 'Pending' },
     { key: 'completed' as const, label: 'Completed' },
   ];
 
-  const emergencyCount = displayAlerts.filter((a) => a.alert_type === 'emergency').length;
+  const emergencyCount = displayAlerts.filter((a) => a.priority === 'high').length;
 
   return (
     <View style={styles.container}>
@@ -122,7 +149,7 @@ export const AlertsScreen = ({ navigation, route }: any) => {
         data={displayAlerts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <AlertCard alert={item} onRespond={handleRespond} />
+          <AlertCard alert={item} onRespond={handleRespond} onDelete={handleDelete} onSolve={handleSolve} />
         )}
         contentContainerStyle={styles.list}
         ListEmptyComponent={

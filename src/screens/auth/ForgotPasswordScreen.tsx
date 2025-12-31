@@ -20,18 +20,18 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
     }
 
     try {
-      await authService.forgotPassword(email);
+      const result = await authService.forgotPassword(email);
       Toast.show({
         type: 'success',
         text1: 'Success',
-        text2: 'Password reset link sent to your email',
+        text2: result.msg || 'Password reset link sent to your email',
       });
       navigation.goBack();
     } catch (error: any) {
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: error.message || 'Failed to send reset link',
+        text2: error.message || 'Failed to send reset link. Please try again.',
       });
     }
   };

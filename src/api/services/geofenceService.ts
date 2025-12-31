@@ -1,14 +1,14 @@
 import axiosInstance from '../axios.config';
 import { API_ENDPOINTS } from '../endpoints';
 import { GeofenceArea } from '../../types/location.types';
-import { getMockGeofence } from '../../utils/mockData';
 import { ENABLE_API_CALLS } from '../config';
+// Removed mock data and local data fallback imports - using only actual backend data
 
 export const geofenceService = {
   getGeofenceDetails: async (geofenceId: string | number): Promise<GeofenceArea> => {
-    // Skip API call if disabled
+    // Always use actual backend data - no mock data fallback
     if (!ENABLE_API_CALLS) {
-      return await getMockGeofence(String(geofenceId));
+      throw new Error('API calls are disabled. Please enable ENABLE_API_CALLS to use actual backend data.');
     }
 
     try {
@@ -28,41 +28,31 @@ export const geofenceService = {
       let response;
       const geofenceIdStr = String(geofenceId);
       
-      // Try different possible geofence endpoint patterns
-      // Note: Geofence API is separate from live_location API
+      // Try only the most likely endpoint patterns first
+      // Reduced from 14 to 3 most common patterns to reduce warning spam
       const possibleEndpoints: Array<{ url: string; method: 'GET' | 'POST'; data?: any }> = [
         // Pattern 1: GET with ID in path (RESTful) - Most common Django pattern
         { url: `/api/security/geofence/${geofenceIdStr}/`, method: 'GET' },
         
-        // Pattern 2: Alternative paths (maybe geofence is at root level)
-        { url: `/api/geofence/${geofenceIdStr}/`, method: 'GET' },
-        { url: `/api/geofence/${geofenceIdStr}`, method: 'GET' },
-        
-        // Pattern 3: GET with query parameters
-        { url: `/api/security/geofence/?id=${geofenceIdStr}`, method: 'GET' },
-        { url: `/api/security/geofence/?geofence_id=${geofenceIdStr}`, method: 'GET' },
-        { url: `/api/geofence/?id=${geofenceIdStr}`, method: 'GET' },
-        { url: `/api/geofence/?geofence_id=${geofenceIdStr}`, method: 'GET' },
-        
-        // Pattern 4: POST with body
-        { url: `/api/security/geofence/`, method: 'POST', data: { geofence_id: geofenceIdStr } },
-        { url: `/api/security/geofence/`, method: 'POST', data: { id: geofenceIdStr } },
-        { url: `/api/geofence/`, method: 'POST', data: { geofence_id: geofenceIdStr } },
-        
-        // Pattern 5: GET without ID (uses JWT token to get current user's geofence)
+        // Pattern 2: GET without ID (uses JWT token to get current user's geofence)
         { url: `/api/security/geofence/`, method: 'GET' },
-        { url: `/api/user/geofence/`, method: 'GET' },
-        { url: `/api/geofence/`, method: 'GET' },
+        
+        // Pattern 3: Alternative path
+        { url: `/api/geofence/${geofenceIdStr}/`, method: 'GET' },
       ];
       
       let lastError: any = null;
       let successfulEndpoint: string | null = null;
       
+      // Only log first attempt, suppress 404 warnings for subsequent attempts
+      let attemptCount = 0;
+      
       for (const endpoint of possibleEndpoints) {
+        attemptCount++;
         try {
-          console.log(`[Geofence] Trying: ${endpoint.method} ${endpoint.url}`);
-          if (endpoint.data) {
-            console.log(`[Geofence] Request body:`, endpoint.data);
+          // Only log first attempt to reduce noise
+          if (attemptCount === 1) {
+            console.log(`[Geofence] Attempting to fetch geofence via: ${endpoint.method} ${endpoint.url}`);
           }
           
           if (endpoint.method === 'POST' && endpoint.data) {
@@ -73,14 +63,12 @@ export const geofenceService = {
           
           successfulEndpoint = `${endpoint.method} ${endpoint.url}`;
           console.log(`[Geofence] ✅ Success with ${successfulEndpoint}`);
-          console.log(`[Geofence] Response status:`, response.status);
           break;
         } catch (error: any) {
           lastError = error;
           const status = error?.response?.status;
-          if (status !== 404) {
-            // If it's not 404, it might be a different error (401, 500, etc.)
-            // which means the endpoint exists but there's an issue
+          // Only log non-404 errors (401, 403, 500, etc.) - suppress 404 warnings
+          if (status && status !== 404) {
             console.warn(`[Geofence] ${endpoint.method} ${endpoint.url} returned:`, status);
             if (status === 401) {
               console.warn(`[Geofence] Authentication error - check JWT token`);
@@ -96,10 +84,8 @@ export const geofenceService = {
       
       // If all endpoints failed, try to get geofence data from profile as last resort
       if (!response) {
-        console.warn('[Geofence] ❌ All geofence endpoint patterns failed');
-        console.warn('[Geofence] Tried endpoints:', possibleEndpoints.map(e => `${e.method} ${e.url}`).join(', '));
-        console.warn('[Geofence] Last error status:', lastError?.response?.status);
-        console.log('[Geofence] Attempting fallback: Fetching profile to check for geofence data...');
+        // Only log summary, not all failed attempts
+        console.log('[Geofence] Geofence API endpoints not available, checking profile for geofence data...');
         
         try {
           // Try fetching profile to see if it contains geofence information
@@ -131,45 +117,49 @@ export const geofenceService = {
               throw new Error(`Geofence API endpoint not found. Profile has geofence_id: ${profileGeofenceId}, but GET /api/security/geofence/${profileGeofenceId}/ returns 404. Please check your backend URL routing.`);
             }
           } else if (profileData?.officer_geofence) {
-            // Profile has geofence name but not ID or details - create fallback geofence
-            console.warn('[Geofence] Profile has geofence name:', profileData.officer_geofence, 'but no geofence_id or details');
-            console.log('[Geofence] Creating fallback geofence from profile data');
+            // Profile has geofence name but not ID or details
+            // Try to fetch geofence by name from backend
+            const geofenceName = profileData.officer_geofence;
+            console.log('[Geofence] Profile has geofence name:', geofenceName);
+            console.log('[Geofence] Attempting to fetch geofence by name from backend...');
             
-            // Create a basic geofence using geofence name and default Pune coordinates
-            // Use current location if available, otherwise use default Pune center
-            const defaultCenter = { latitude: 18.5204, longitude: 73.8567 }; // Pune center
-            const defaultRadius = 5000; // 5km radius
-            
-            // Create a square polygon around the center
-            const radiusDegrees = defaultRadius / 111000; // Rough conversion: 1 degree ≈ 111km
-            const fallbackCoordinates = [
-              { latitude: defaultCenter.latitude - radiusDegrees, longitude: defaultCenter.longitude - radiusDegrees },
-              { latitude: defaultCenter.latitude - radiusDegrees, longitude: defaultCenter.longitude + radiusDegrees },
-              { latitude: defaultCenter.latitude + radiusDegrees, longitude: defaultCenter.longitude + radiusDegrees },
-              { latitude: defaultCenter.latitude + radiusDegrees, longitude: defaultCenter.longitude - radiusDegrees },
-            ];
-            
-            const fallbackGeofence: GeofenceArea = {
-              geofence_id: String(geofenceId),
-              name: profileData.officer_geofence || 'Unnamed Geofence',
-              description: `Geofence area for ${profileData.officer_geofence}`,
-              coordinates: fallbackCoordinates,
-              center: defaultCenter,
-              radius: defaultRadius,
-              active_users_count: 0,
-              area_size: 0,
-            };
-            
-            console.log('[Geofence] ✅ Created fallback geofence:', fallbackGeofence);
-            return fallbackGeofence;
+            try {
+              // Try fetching by name from backend
+              const nameResponse = await axiosInstance.get(`/api/security/geofence/?name=${encodeURIComponent(geofenceName)}`);
+              if (nameResponse.data && (nameResponse.data.id || nameResponse.data.geofence_id)) {
+                console.log('[Geofence] ✅ Successfully fetched geofence by name from backend');
+                // Process the response the same way as ID-based fetch
+                const geofenceData = nameResponse.data.data || nameResponse.data;
+                // Continue with normal processing below...
+                response = { data: geofenceData };
+              } else {
+                throw new Error('Geofence not found in backend response');
+              }
+            } catch (nameError: any) {
+              console.error('[Geofence] Failed to fetch geofence by name from backend:', nameError?.response?.status || nameError?.message);
+              throw new Error(
+                `Geofence "${geofenceName}" is assigned but geofence details are not available from backend. ` +
+                `Please ensure GET /api/security/geofence/{id}/ or GET /api/security/geofence/?name={name} endpoint is implemented.`
+              );
+            }
           } else {
             console.error('[Geofence] Profile does not contain geofence information');
             console.error('[Geofence] Available profile fields:', Object.keys(profileData).join(', '));
-            throw new Error(`Geofence API endpoint not found and profile has no geofence data. Please implement GET /api/security/geofence/{id}/ endpoint in your backend.`);
+            throw new Error(
+              `Geofence API endpoint not found and profile has no geofence data. ` +
+              `Please implement GET /api/security/geofence/{id}/ endpoint in your backend to fetch geofence details.`
+            );
           }
         } catch (profileError: any) {
-          console.error('[Geofence] Profile fallback also failed:', profileError);
-          throw new Error(`Geofence API endpoint not found. Tried: ${possibleEndpoints.map(e => `${e.method} ${e.url}`).join(', ')}. Profile endpoint also unavailable or doesn't contain geofence data. Please implement GET /api/security/geofence/{id}/ in your backend.`);
+          // Re-throw if it's already our formatted error, otherwise wrap it
+          if (profileError.message && profileError.message.includes('Geofence')) {
+            throw profileError;
+          }
+          console.error('[Geofence] Profile fallback failed:', profileError.message);
+          throw new Error(
+            `Cannot fetch geofence details. Geofence API endpoints are not available. ` +
+            `Please implement GET /api/security/geofence/{id}/ endpoint in your backend.`
+          );
         }
       }
       
@@ -194,7 +184,12 @@ export const geofenceService = {
         assignedGeofence = geofenceData;
       }
       
-      // Parse polygon_json if it exists (could be string or array)
+      // Log the assigned_geofence data for debugging
+      if (assignedGeofence) {
+        console.log('[Geofence] ✅ Found assigned_geofence data:', JSON.stringify(assignedGeofence, null, 2));
+      }
+      
+      // Parse polygon_json if it exists (could be string, GeoJSON object, or array)
       let coordinates: Array<{ latitude: number; longitude: number }> = [];
       if (assignedGeofence?.polygon_json) {
         try {
@@ -203,12 +198,39 @@ export const geofenceService = {
             ? JSON.parse(assignedGeofence.polygon_json)
             : assignedGeofence.polygon_json;
           
-          // Handle different polygon formats
-          if (Array.isArray(polygonData)) {
+          // Handle GeoJSON format: { type: "Polygon", coordinates: [[[lng, lat], ...]] }
+          if (polygonData && typeof polygonData === 'object' && polygonData.type === 'Polygon') {
+            // GeoJSON Polygon format: coordinates is array of rings, first ring is outer boundary
+            const rings = polygonData.coordinates;
+            if (Array.isArray(rings) && rings.length > 0) {
+              // Get the first ring (outer boundary)
+              const outerRing = rings[0];
+              if (Array.isArray(outerRing)) {
+                // GeoJSON coordinates are [longitude, latitude]
+                coordinates = outerRing.map((coord: any) => {
+                  if (Array.isArray(coord) && coord.length >= 2) {
+                    return {
+                      latitude: coord[1], // GeoJSON has lng first, then lat
+                      longitude: coord[0],
+                    };
+                  }
+                  return { latitude: 0, longitude: 0 };
+                });
+                console.log('[Geofence] ✅ Parsed GeoJSON polygon:', coordinates.length, 'coordinates');
+              }
+            }
+          }
+          // Handle simple array format: [[lat, lng], ...] or [[lng, lat], ...]
+          else if (Array.isArray(polygonData)) {
             coordinates = polygonData.map((coord: any) => {
-              // Handle [lat, lng] format
-              if (Array.isArray(coord)) {
-                return { latitude: coord[0], longitude: coord[1] };
+              // Handle [lat, lng] or [lng, lat] format
+              if (Array.isArray(coord) && coord.length >= 2) {
+                // Try to detect format: if first value > 90, it's probably longitude (lng first)
+                const isLngFirst = Math.abs(coord[0]) > 90;
+                return {
+                  latitude: isLngFirst ? coord[1] : coord[0],
+                  longitude: isLngFirst ? coord[0] : coord[1],
+                };
               }
               // Handle {lat, lng} or {latitude, longitude} format
               return {
@@ -216,10 +238,32 @@ export const geofenceService = {
                 longitude: coord.longitude || coord.lng || 0,
               };
             });
+            console.log('[Geofence] ✅ Parsed array polygon:', coordinates.length, 'coordinates');
           }
-          console.log('[Geofence] Parsed polygon_json:', coordinates);
+          // Handle object format: { coordinates: [...] }
+          else if (polygonData.coordinates && Array.isArray(polygonData.coordinates)) {
+            const coords = polygonData.coordinates;
+            coordinates = coords.map((coord: any) => {
+              if (Array.isArray(coord) && coord.length >= 2) {
+                const isLngFirst = Math.abs(coord[0]) > 90;
+                return {
+                  latitude: isLngFirst ? coord[1] : coord[0],
+                  longitude: isLngFirst ? coord[0] : coord[1],
+                };
+              }
+              return {
+                latitude: coord.latitude || coord.lat || 0,
+                longitude: coord.longitude || coord.lng || 0,
+              };
+            });
+            console.log('[Geofence] ✅ Parsed object polygon:', coordinates.length, 'coordinates');
+          }
+          
+          if (coordinates.length === 0) {
+            console.warn('[Geofence] ⚠️ Could not parse polygon_json, format not recognized:', typeof polygonData);
+          }
         } catch (error) {
-          console.error('[Geofence] Error parsing polygon_json:', error);
+          console.error('[Geofence] ❌ Error parsing polygon_json:', error);
         }
       }
       
@@ -232,17 +276,36 @@ export const geofenceService = {
             : assignedGeofence.center_point;
           
           if (Array.isArray(centerData)) {
-            center = { latitude: centerData[0], longitude: centerData[1] };
-          } else {
+            // Backend returns center_point as [latitude, longitude]
+            // But some APIs might return [longitude, latitude]
+            // Check if first value > 90 (likely longitude)
+            const isLngFirst = centerData.length >= 2 && Math.abs(centerData[0]) > 90;
+            center = {
+              latitude: isLngFirst ? centerData[1] : centerData[0],
+              longitude: isLngFirst ? centerData[0] : centerData[1],
+            };
+            console.log('[Geofence] ✅ Parsed center_point:', center);
+          } else if (centerData && typeof centerData === 'object') {
             center = {
               latitude: centerData.latitude || centerData.lat || 0,
               longitude: centerData.longitude || centerData.lng || 0,
             };
+            console.log('[Geofence] ✅ Parsed center_point object:', center);
           }
-          console.log('[Geofence] Parsed center_point:', center);
         } catch (error) {
-          console.error('[Geofence] Error parsing center_point:', error);
+          console.error('[Geofence] ❌ Error parsing center_point:', error);
         }
+      }
+      
+      // If no center point found but we have coordinates, calculate center from coordinates
+      if ((center.latitude === 0 && center.longitude === 0) && coordinates.length > 0) {
+        const sumLat = coordinates.reduce((sum, coord) => sum + coord.latitude, 0);
+        const sumLng = coordinates.reduce((sum, coord) => sum + coord.longitude, 0);
+        center = {
+          latitude: sumLat / coordinates.length,
+          longitude: sumLng / coordinates.length,
+        };
+        console.log('[Geofence] ✅ Calculated center from coordinates:', center);
       }
       
       // Ensure geofence_id is set from assigned_geofence or parameter
