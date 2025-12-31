@@ -4,6 +4,11 @@ apply plugin: "com.facebook.react"
 
 apply from: file("../../node_modules/react-native-vector-icons/fonts.gradle")
 
+// Disable Hermes to prevent "Unexpected token '?'" runtime errors
+project.ext.react = [
+    enableHermes: false
+]
+
 react {
     /* You can customize React Native configuration here if needed. */
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { WebView } from 'react-native-webview';
+import type { WebView as WebViewType } from 'react-native-webview';
 import Geolocation from 'react-native-geolocation-service';
 import { useAppSelector } from '../../redux/hooks';
 import { useLocation } from '../../hooks/useLocation';
@@ -20,7 +21,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
   const [geofence, setGeofence] = useState<GeofenceArea | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number } | null>(location);
-  const webViewRef = useRef(null);
+  const webViewRef = useRef<WebViewType | null>(null);
   const watchIdRef = useRef<number | null>(null);
 
   // Define fetchGeofence before useEffect so it's available
@@ -103,11 +104,11 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
 
       // Check for valid geofence_id (not empty, not '0', not 0)
       const geofenceId = officer.geofence_id;
+      const geofenceIdStr = String(geofenceId || '');
       const isValidGeofenceId = geofenceId && 
-                                 geofenceId !== '' && 
-                                 geofenceId !== '0' && 
-                                 geofenceId !== 0 &&
-                                 String(geofenceId).trim() !== '';
+                                 geofenceIdStr !== '' && 
+                                 geofenceIdStr !== '0' && 
+                                 geofenceIdStr.trim() !== '';
 
       if (!isValidGeofenceId) {
         console.warn('[GeofenceMap] Cannot fetch geofence - missing or invalid geofence_id', {
@@ -235,7 +236,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               // Update map marker
               if (webViewRef.current) {
                 const script = `
-                  if (window.updateUserLocation) {
+                  if (window.map && typeof window.map.fitBounds === 'function' && window.updateUserLocation) {
                     window.updateUserLocation(${newLocation.latitude}, ${newLocation.longitude});
                   }
                 `;
@@ -286,7 +287,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       const center = getMapCenter();
       
       const script = `
-        if (typeof L !== 'undefined' && L.map && typeof map !== 'undefined') {
+        if (window.map && typeof window.map.fitBounds === 'function' && typeof L !== 'undefined' && L.map && typeof map !== 'undefined') {
           // Remove existing geofence polygon if any
           if (window.geofencePolygonLayer) {
             map.removeLayer(window.geofencePolygonLayer);
@@ -315,7 +316,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
     } else if (webViewRef.current && currentLocation) {
       const center = getMapCenter();
       const script = `
-        if (window.updateMapCenter && typeof map !== 'undefined') {
+        if (window.map && typeof window.map.fitBounds === 'function' && window.updateMapCenter && typeof map !== 'undefined') {
           window.updateMapCenter(${center.lat}, ${center.lng});
         }
       `;
@@ -424,7 +425,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               geofence.coordinates.map(c => [c.latitude, c.longitude])
             );
             const script = `
-              if (typeof L !== 'undefined' && L.map) {
+              if (window.map && typeof window.map.fitBounds === 'function' && typeof L !== 'undefined' && L.map && typeof map !== 'undefined') {
                 const geofenceCoords = ${geofencePolygon};
                 if (geofenceCoords && geofenceCoords.length > 0) {
                   const polygon = L.polygon(geofenceCoords, {
@@ -450,7 +451,9 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
         onRecenter={() => {
           if (webViewRef.current && mapCenter) {
             webViewRef.current.injectJavaScript(`
-              if (window.recenter) window.recenter(${mapCenter.lat}, ${mapCenter.lng});
+              if (window.map && typeof window.map.fitBounds === 'function' && window.recenter) {
+                window.recenter(${mapCenter.lat}, ${mapCenter.lng});
+              }
             `);
           }
         }}
@@ -470,7 +473,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
               <View style={styles.infoLeft}>
                 <Text style={styles.areaName}>{geofence.name}</Text>
                 <View style={styles.zoneBadge}>
-                  <Text style={styles.zoneText}>Zone {geofence.geofence_id.slice(-1)}</Text>
+                  <Text style={styles.zoneText}>Zone {String(geofence.geofence_id).slice(-1)}</Text>
                 </View>
                 <Text style={styles.coverage}>
                   {(geofence.area_size && typeof geofence.area_size === 'number') ? geofence.area_size.toFixed(1) : '0'} km² • {geofence.radius ? (geofence.radius / 1000).toFixed(1) : '1.5'} km radius
