@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import WebViewLeaflet from "react-native-webview-leaflet";
-import { getCurrentLocation } from '../services/locationService';
+import locationService from '../services/locationService';
 
 export default function LeafletMapScreen() {
   const [position, setPosition] = useState(null);
@@ -9,7 +9,7 @@ export default function LeafletMapScreen() {
   useEffect(() => {
     async function loadLocation() {
       try {
-        const coords = await getCurrentLocation();
+        const coords = await locationService.getCurrentLocation();
         setPosition({ lat: coords.coords.latitude, lng: coords.coords.longitude });
       } catch (e) {
         console.log("Location error:", e);

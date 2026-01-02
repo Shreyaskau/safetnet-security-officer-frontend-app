@@ -1,38 +1,13 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Config from 'react-native-dotenv';
-import apiConfig, { ENABLE_API_CALLS } from './config';
 
-// Determine base URL based on environment
-// Priority: .env file > config.ts default
-const getBaseURL = () => {
-  // Check if we have a custom API URL in env (highest priority)
-  if (Config.API_BASE_URL) {
-    let url = Config.API_BASE_URL.trim();
-    // Remove trailing slash if present
-    if (url.endsWith('/')) {
-      url = url.slice(0, -1);
-    }
-    // Endpoints already include /api/security/...
-    // So if base URL ends with /api, remove it to avoid double /api/api
-    if (url.endsWith('/api')) {
-      url = url.slice(0, -4); // Remove '/api'
-    }
-    console.log(`[API Config] Using base URL from .env: ${url}`);
-    return url;
-  }
-  
-  // Use the BASE_URL from config.ts
-  const baseUrl = apiConfig.BASE_URL;
-  console.log(`[API Config] Using base URL from config: ${baseUrl}`);
-  return baseUrl;
-};
-
+// Hardened Axios config for mobile + Render + TLS handshake
 const axiosInstance = axios.create({
-  baseURL: getBaseURL(),
-  timeout: 20000, // 20 seconds - Render free tier can take 10-30 seconds to wake up
+  baseURL: 'https://safetnet-backend.onrender.com/api/security',
+  timeout: 20000, // 20 seconds - Mobile + Render + TLS handshake = slow first request
   headers: {
     'Content-Type': 'application/json',
+    Accept: 'application/json',
   },
 });
 
@@ -64,7 +39,9 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     // Handle 404 errors gracefully - don't spam console
     if (error.response && error.response.status === 404) {
-      const endpoint = `${error.config?.method?.toUpperCase()} ${error.config?.url}`;
+      const method = (error.config && error.config.method) ? error.config.method.toUpperCase() : 'UNKNOWN';
+      const url = (error.config && error.config.url) ? error.config.url : 'unknown';
+      const endpoint = `${method} ${url}`;
       // Only log 404 once per endpoint
       if (!logged404Endpoints.has(endpoint)) {
         console.warn(`[API] Endpoint not found (404): ${endpoint} - Using fallback data`);
@@ -73,7 +50,9 @@ axiosInstance.interceptors.response.use(
       // Don't log the full HTML response for 404s - it's just noise
     } else if (error.response) {
       // Server responded with error status (non-404)
-      console.error(`[API Error] ${error.response.status} ${error.config?.method?.toUpperCase()} ${error.config?.url}`);
+      const method = (error.config && error.config.method) ? error.config.method.toUpperCase() : 'UNKNOWN';
+      const url = (error.config && error.config.url) ? error.config.url : 'unknown';
+      console.error(`[API Error] ${error.response.status} ${method} ${url}`);
       // Only log response data if it's not HTML (HTML 404 pages are not useful)
       if (typeof error.response.data === 'string' && error.response.data.includes('<!doctype html>')) {
         // Skip logging HTML error pages
@@ -82,13 +61,17 @@ axiosInstance.interceptors.response.use(
       }
     } else if (error.request) {
       // Request made but no response received (network error)
-      const endpoint = `${error.config?.method?.toUpperCase()} ${error.config?.url || error.config?.baseURL}`;
+      const method = (error.config && error.config.method) ? error.config.method.toUpperCase() : 'UNKNOWN';
+      const url = (error.config && error.config.url) ? error.config.url : ((error.config && error.config.baseURL) ? error.config.baseURL : 'unknown');
+      const endpoint = `${method} ${url}`;
       // Only log network errors once per endpoint to avoid spam
       if (!loggedNetworkErrors.has(endpoint)) {
         loggedNetworkErrors.add(endpoint);
         console.warn(`[API Network] Connection timeout/error for: ${endpoint}`);
         console.warn(`[API Network] Backend may be sleeping (Render free tier takes 10-30s to wake up)`);
-        console.warn(`[API Network] URL: ${error.config?.baseURL}${error.config?.url}`);
+        const baseURL = (error.config && error.config.baseURL) ? error.config.baseURL : '';
+        const configUrl = (error.config && error.config.url) ? error.config.url : '';
+        console.warn(`[API Network] URL: ${baseURL}${configUrl}`);
         console.warn(`[API Network] Wait 30 seconds and try again, or check Render dashboard`);
       }
     } else {

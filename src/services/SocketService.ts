@@ -1,5 +1,7 @@
 import { io, Socket } from 'socket.io-client';
-import Config from 'react-native-dotenv';
+
+// Socket URL configuration
+const SOCKET_URL = 'wss://safetnet.site/ws/';
 
 export class SocketService {
   private socket: Socket | null = null;
@@ -10,7 +12,7 @@ export class SocketService {
       return;
     }
 
-    this.socket = io(Config.SOCKET_URL || 'wss://safetnet.site/ws/', {
+    this.socket = io(SOCKET_URL, {
       transports: ['websocket'],
       query: {
         userId,

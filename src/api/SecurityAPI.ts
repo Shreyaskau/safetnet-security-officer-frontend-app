@@ -1,30 +1,10 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Config from 'react-native-dotenv';
 import apiConfig from './config';
 
-// Determine base URL - use environment variable or default from config
+// Determine base URL - use config.ts
 const getBaseURL = () => {
-  // Priority 1: Check environment variable (for deployment flexibility)
-  // This allows you to set API_BASE_URL in .env file or build configuration
-  if (Config.API_BASE_URL) {
-    let url = Config.API_BASE_URL.trim();
-    // Remove trailing slash
-    if (url.endsWith('/')) {
-      url = url.slice(0, -1);
-    }
-    // Add /api/security if not already included (without trailing slash)
-    if (!url.includes('/api/security')) {
-      url += '/api/security';
-    }
-    // Ensure no trailing slash (endpoints will start with /)
-    if (url.endsWith('/')) {
-      url = url.slice(0, -1);
-    }
-    return url;
-  }
-  
-  // Priority 2: Use BASE_URL from config.ts and append /api/security (no trailing slash)
+  // Use BASE_URL from config.ts and append /api/security (no trailing slash)
   const baseUrl = apiConfig.BASE_URL;
   const apiUrl = `${baseUrl}/api/security`;
   return apiUrl;
@@ -178,13 +158,26 @@ export const initializeToken = async () => {
 // 🔐 LOGIN API (You just added this in backend)
 // --------------------------------------
 export const loginOfficer = async (username: string, password: string) => {
+  // Trim whitespace and prepare request
+  const requestData = { 
+    username: username.trim(), 
+    password: password.trim()
+  };
+  
+  // Single retry wrapper for login (handles Render cold starts)
   try {
-    // Trim whitespace and prepare request
-    const requestData = { 
-      username: username.trim(), 
-      password: password.trim()
-    };
-    
+    return await performLogin(requestData);
+  } catch (err) {
+    // Wait 2 seconds before retry
+    await new Promise(res => setTimeout(res, 2000));
+    // One retry only - no loops
+    return await performLogin(requestData);
+  }
+};
+
+// Internal login function (extracted for retry logic)
+const performLogin = async (requestData: { username: string; password: string }) => {
+  try {
     // Make API request - use longer timeout for Render free tier
     const endpoint = "/login/";
     const res = await apiClient.post(endpoint, requestData, {
@@ -195,16 +188,17 @@ export const loginOfficer = async (username: string, password: string) => {
     
     // Check for login failure
     if (res.status === 400) {
-      const errorMessage = responseData?.non_field_errors?.[0] || 
-                          responseData?.error || 
-                          responseData?.detail ||
+      const nonFieldErrors = (responseData && responseData.non_field_errors && Array.isArray(responseData.non_field_errors)) ? responseData.non_field_errors : null;
+      const errorMessage = (nonFieldErrors && nonFieldErrors.length > 0) ? nonFieldErrors[0] : 
+                          (responseData && responseData.error) ? responseData.error : 
+                          (responseData && responseData.detail) ? responseData.detail :
                           "Invalid credentials";
       throw new Error(errorMessage);
     }
     
     // Extract tokens
-    const accessToken = responseData?.access || responseData?.token;
-    const refreshToken = responseData?.refresh;
+    const accessToken = (responseData && responseData.access) ? responseData.access : ((responseData && responseData.token) ? responseData.token : null);
+    const refreshToken = (responseData && responseData.refresh) ? responseData.refresh : null;
     
     if (!accessToken) {
       throw new Error("Access token not received from server");
@@ -222,9 +216,11 @@ export const loginOfficer = async (username: string, password: string) => {
     if (error.response) {
       const status = error.response.status;
       if (status === 400) {
-        const errorMsg = error.response.data?.non_field_errors?.[0] || 
-                        error.response.data?.error || 
-                        error.response.data?.detail ||
+        const responseData = error.response.data;
+        const nonFieldErrors = (responseData && responseData.non_field_errors && Array.isArray(responseData.non_field_errors)) ? responseData.non_field_errors : null;
+        const errorMsg = (nonFieldErrors && nonFieldErrors.length > 0) ? nonFieldErrors[0] : 
+                        (responseData && responseData.error) ? responseData.error : 
+                        (responseData && responseData.detail) ? responseData.detail :
                         "Invalid credentials";
         throw new Error(errorMsg);
       } else if (status >= 500) {
