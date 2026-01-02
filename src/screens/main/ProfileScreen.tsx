@@ -30,8 +30,11 @@ export const ProfileScreen = ({ navigation }: any) => {
 
   // Function to fetch profile data
   const fetchProfileData = useCallback(async () => {
-    if (!officer?.security_id) {
+    if (!officer || !officer.security_id) {
       setIsLoading(false);
+      if (officer) {
+        setProfileData(officer);
+      }
       return;
     }
 
@@ -39,35 +42,48 @@ export const ProfileScreen = ({ navigation }: any) => {
       setIsLoading(true);
       console.log('[ProfileScreen] Fetching profile data for:', officer.security_id);
       
-      // Fetch profile from API
-      const profile: any = await profileService.getProfile(officer.security_id);
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 15000);
+      });
+      
+      // Fetch profile from API with timeout
+      const profile: any = await Promise.race([
+        profileService.getProfile(officer.security_id),
+        timeoutPromise
+      ]);
       console.log('[ProfileScreen] Profile data received:', JSON.stringify(profile, null, 2));
       
       // Extract phone number from various possible backend fields
       // Check all possible locations including nested user objects
+      // ES5-compatible: no optional chaining
+      const userObj = profile.user;
+      const securityOfficerObj = profile.security_officer;
+      const officerObj = profile.officer;
+      
       const phoneNumber = 
         // Direct profile fields
-        profile.mobile || 
-        profile.phone || 
-        profile.officer_phone || 
-        profile.phone_number ||
-        profile.contact_number ||
-        profile.contact_phone ||
-        profile.phone_no ||
-        profile.contact ||
+        (profile.mobile && profile.mobile) || 
+        (profile.phone && profile.phone) || 
+        (profile.officer_phone && profile.officer_phone) || 
+        (profile.phone_number && profile.phone_number) ||
+        (profile.contact_number && profile.contact_number) ||
+        (profile.contact_phone && profile.contact_phone) ||
+        (profile.phone_no && profile.phone_no) ||
+        (profile.contact && profile.contact) ||
         // Nested user object fields (common in Django REST Framework)
-        profile.user?.mobile ||
-        profile.user?.phone ||
-        profile.user?.phone_number ||
-        profile.user?.contact_number ||
+        (userObj && userObj.mobile && userObj.mobile) ||
+        (userObj && userObj.phone && userObj.phone) ||
+        (userObj && userObj.phone_number && userObj.phone_number) ||
+        (userObj && userObj.contact_number && userObj.contact_number) ||
         // SecurityOfficer model fields (if nested)
-        profile.security_officer?.mobile ||
-        profile.security_officer?.phone ||
+        (securityOfficerObj && securityOfficerObj.mobile && securityOfficerObj.mobile) ||
+        (securityOfficerObj && securityOfficerObj.phone && securityOfficerObj.phone) ||
         // Officer profile fields
-        profile.officer?.mobile ||
-        profile.officer?.phone ||
+        (officerObj && officerObj.mobile && officerObj.mobile) ||
+        (officerObj && officerObj.phone && officerObj.phone) ||
         // Fallback to Redux officer data
-        officer.mobile || 
+        (officer.mobile && officer.mobile) || 
         '';
       
       console.log('[ProfileScreen] Phone number extraction (comprehensive):', {
@@ -76,14 +92,14 @@ export const ProfileScreen = ({ navigation }: any) => {
         'profile.officer_phone': profile.officer_phone,
         'profile.phone_number': profile.phone_number,
         'profile.contact_number': profile.contact_number,
-        'profile.user?.mobile': profile.user?.mobile,
-        'profile.user?.phone': profile.user?.phone,
-        'profile.security_officer?.mobile': profile.security_officer?.mobile,
-        'profile.officer?.mobile': profile.officer?.mobile,
+        'profile.user.mobile': userObj && userObj.mobile ? userObj.mobile : undefined,
+        'profile.user.phone': userObj && userObj.phone ? userObj.phone : undefined,
+        'profile.security_officer.mobile': securityOfficerObj && securityOfficerObj.mobile ? securityOfficerObj.mobile : undefined,
+        'profile.officer.mobile': officerObj && officerObj.mobile ? officerObj.mobile : undefined,
         'officer.mobile (Redux)': officer.mobile,
         'extracted_phone': phoneNumber,
-        'profile_keys': Object.keys(profile || {}),
-        'profile.user_keys': profile.user ? Object.keys(profile.user) : 'no user object',
+        'profile_keys': profile ? Object.keys(profile) : [],
+        'profile.user_keys': userObj ? Object.keys(userObj) : 'no user object',
       });
       
       // Merge with existing officer data
@@ -118,10 +134,13 @@ export const ProfileScreen = ({ navigation }: any) => {
       }));
       
       // Fetch geofence name if geofence_id is available
-      const geofenceId = profile.assigned_geofence?.id || 
-                        profile.geofence_id || 
-                        profile.officer_geofence ||
-                        officer.geofence_id;
+      // ES5-compatible: no optional chaining
+      const assignedGeofence = profile.assigned_geofence;
+      const geofenceId = (assignedGeofence && assignedGeofence.id ? assignedGeofence.id : null) || 
+                        (profile.geofence_id && profile.geofence_id) || 
+                        (profile.officer_geofence && profile.officer_geofence) ||
+                        (officer.geofence_id && officer.geofence_id) ||
+                        null;
       
       if (geofenceId) {
         try {
@@ -139,23 +158,48 @@ export const ProfileScreen = ({ navigation }: any) => {
     } catch (error: any) {
       console.error('[ProfileScreen] Error fetching profile:', error);
       // Use existing officer data as fallback
-      setProfileData(officer);
+      if (officer) {
+        setProfileData(officer);
+      }
+      // Ensure loading is set to false even on error
+      setIsLoading(false);
     } finally {
+      // Double-check loading is set to false
       setIsLoading(false);
     }
-  }, [officer?.security_id, dispatch]);
+  }, [officer, dispatch]);
 
-  // Fetch profile data when component mounts
+  // Fetch profile data when component mounts or officer.security_id changes
   useEffect(() => {
-    fetchProfileData();
-  }, [fetchProfileData]);
+    const securityId = officer && officer.security_id ? officer.security_id : null;
+    if (securityId) {
+      fetchProfileData();
+    } else {
+      setIsLoading(false);
+      if (officer) {
+        setProfileData(officer);
+      }
+    }
+    // Only depend on security_id, not the entire fetchProfileData function
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officer && officer.security_id ? officer.security_id : null]);
 
   // Refresh profile data when screen comes into focus (e.g., returning from UpdateProfileScreen)
   useFocusEffect(
     useCallback(() => {
-      console.log('[ProfileScreen] Screen focused, refreshing profile data...');
-      fetchProfileData();
-    }, [fetchProfileData])
+      const securityId = officer && officer.security_id ? officer.security_id : null;
+      if (securityId) {
+        console.log('[ProfileScreen] Screen focused, refreshing profile data...');
+        fetchProfileData();
+      } else {
+        setIsLoading(false);
+        if (officer) {
+          setProfileData(officer);
+        }
+      }
+      // Only depend on security_id, not the entire fetchProfileData function
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [officer && officer.security_id ? officer.security_id : null])
   );
 
   const handleLogout = async () => {

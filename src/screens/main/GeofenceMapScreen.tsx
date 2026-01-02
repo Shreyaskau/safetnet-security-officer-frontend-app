@@ -28,6 +28,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
   const [wasInsideGeofence, setWasInsideGeofence] = useState<boolean | null>(null); // Track previous state for entry/exit detection
   const webViewRef = useRef<WebViewType | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  const lastStableLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
   // Define fetchGeofence before useEffect so it's available
   const fetchGeofence = useCallback(async () => {
@@ -246,6 +247,23 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
 
   const mapCenter = getMapCenter();
   
+  // Haversine formula to calculate distance between two coordinates in meters
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    try {
+      const R = 6371000; // Earth radius in meters
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    } catch (error) {
+      console.error('[GeofenceMap] Error calculating distance:', error);
+      return 0;
+    }
+  };
+
   // Start live location tracking
   useEffect(() => {
     let mounted = true;
@@ -259,70 +277,118 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
           Geolocation.clearWatch(watchIdRef.current);
         }
 
+        // Initialize last stable location if currentLocation exists
+        if (currentLocation) {
+          lastStableLocationRef.current = {
+            latitude: currentLocation.latitude,
+            longitude: currentLocation.longitude
+          };
+        }
+
         watchIdRef.current = Geolocation.watchPosition(
           (position) => {
-            if (!mounted) return;
-            
-            if (position && position.coords) {
-              const newLocation = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy || undefined,
-              };
+            try {
+              if (!mounted) return;
               
-              setCurrentLocation(newLocation);
-              
-              // Check if officer entered/exited geofence area
-              if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
-                const isInside = isPointInPolygon(newLocation, geofence.coordinates);
+              if (position && position.coords) {
+                const newLat = position.coords.latitude;
+                const newLng = position.coords.longitude;
+                const newAccuracy = position.coords.accuracy ? position.coords.accuracy : undefined;
                 
-                // Check if state changed (entered or exited)
-                if (wasInsideGeofence !== null && wasInsideGeofence !== isInside) {
-                  if (isInside && !wasInsideGeofence) {
-                    // Officer entered the geofence area
-                    Alert.alert(
-                      '✅ Area Entered',
-                      `You have entered your allocated area: ${geofence.name || 'Geofence Area'}`,
-                      [{ text: 'OK', style: 'default' }],
-                      { cancelable: true }
-                    );
-                    console.log('[GeofenceMap] ✅ Officer entered geofence area:', geofence.name);
-                  } else if (!isInside && wasInsideGeofence) {
-                    // Officer exited the geofence area
-                    Alert.alert(
-                      '⚠️ Area Exited',
-                      `You have left your allocated area: ${geofence.name || 'Geofence Area'}`,
-                      [{ text: 'OK', style: 'default' }],
-                      { cancelable: true }
-                    );
-                    console.log('[GeofenceMap] ⚠️ Officer exited geofence area:', geofence.name);
+                // Check if we have a previous stable location
+                const lastStable = lastStableLocationRef.current;
+                let shouldUpdate = false;
+                
+                if (lastStable === null) {
+                  // First location update - always accept
+                  shouldUpdate = true;
+                } else {
+                  // Calculate distance from last stable location
+                  const distance = calculateDistance(
+                    lastStable.latitude,
+                    lastStable.longitude,
+                    newLat,
+                    newLng
+                  );
+                  
+                  // Only update if movement >= 6 meters
+                  if (distance >= 6) {
+                    shouldUpdate = true;
                   }
                 }
                 
-                setWasInsideGeofence(isInside);
-              } else if (wasInsideGeofence === null) {
-                // Initialize state if geofence is not loaded yet
-                setWasInsideGeofence(false);
-              }
-              
-              // Update map marker
-              if (webViewRef.current) {
-                const script = `
-                  if (window.map && typeof window.map.fitBounds === 'function' && window.updateUserLocation) {
-                    window.updateUserLocation(${newLocation.latitude}, ${newLocation.longitude}, ${newLocation.accuracy || 50});
+                if (shouldUpdate) {
+                  const newLocation = {
+                    latitude: newLat,
+                    longitude: newLng,
+                    accuracy: newAccuracy,
+                  };
+                  
+                  // Update last stable location ref
+                  lastStableLocationRef.current = {
+                    latitude: newLat,
+                    longitude: newLng
+                  };
+                  
+                  // Update state
+                  setCurrentLocation(newLocation);
+                  
+                  // Check if officer entered/exited geofence area
+                  if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
+                    const isInside = isPointInPolygon(newLocation, geofence.coordinates);
+                    
+                    // Check if state changed (entered or exited)
+                    if (wasInsideGeofence !== null && wasInsideGeofence !== isInside) {
+                      if (isInside && !wasInsideGeofence) {
+                        // Officer entered the geofence area
+                        Alert.alert(
+                          '✅ Area Entered',
+                          'You have entered your allocated area: ' + (geofence.name || 'Geofence Area'),
+                          [{ text: 'OK', style: 'default' }],
+                          { cancelable: true }
+                        );
+                        console.log('[GeofenceMap] ✅ Officer entered geofence area:', geofence.name);
+                      } else if (!isInside && wasInsideGeofence) {
+                        // Officer exited the geofence area
+                        Alert.alert(
+                          '⚠️ Area Exited',
+                          'You have left your allocated area: ' + (geofence.name || 'Geofence Area'),
+                          [{ text: 'OK', style: 'default' }],
+                          { cancelable: true }
+                        );
+                        console.log('[GeofenceMap] ⚠️ Officer exited geofence area:', geofence.name);
+                      }
+                    }
+                    
+                    setWasInsideGeofence(isInside);
+                  } else if (wasInsideGeofence === null) {
+                    // Initialize state if geofence is not loaded yet
+                    setWasInsideGeofence(false);
                   }
-                `;
-                webViewRef.current.injectJavaScript(script);
+                  
+                  // Update map marker position only (don't recreate)
+                  if (webViewRef.current) {
+                    const accuracyValue = newAccuracy ? newAccuracy : 50;
+                    const script = 
+                      'if (window.map && typeof window.map.fitBounds === "function" && window.updateUserLocation) {' +
+                      '  window.updateUserLocation(' + newLat + ', ' + newLng + ', ' + accuracyValue + ');' +
+                      '}';
+                    webViewRef.current.injectJavaScript(script);
+                  }
+                }
               }
+            } catch (error) {
+              console.error('[GeofenceMap] Error processing location update:', error);
             }
           },
           (error) => {
             console.warn('[GeofenceMap] Location tracking error:', error);
           },
           {
-            enableHighAccuracy: false,
-            distanceFilter: 10, // Update every 10 meters
-            interval: 5000, // Update every 5 seconds
+            enableHighAccuracy: true,
+            distanceFilter: 0,
+            interval: 1000,
+            fastestInterval: 1000,
             showLocationDialog: true,
           }
         );
@@ -339,10 +405,11 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
         Geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
+      lastStableLocationRef.current = null;
     };
   }, []);
 
-  // Update map when location or geofence changes
+  // Update map when geofence changes (NOT when location changes - location updates are handled separately)
   useEffect(() => {
     if (webViewRef.current && geofence && geofence.coordinates && geofence.coordinates.length > 0) {
       console.log('[GeofenceMap] Updating map with geofence data:', {
@@ -409,16 +476,8 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
           webViewRef.current.injectJavaScript(script);
         }
       }, 300);
-    } else if (webViewRef.current && currentLocation) {
-      const center = getMapCenter();
-      const script = `
-        if (window.map && typeof window.map.fitBounds === 'function' && window.updateMapCenter && typeof map !== 'undefined') {
-          window.updateMapCenter(${center.lat}, ${center.lng});
-        }
-      `;
-      webViewRef.current.injectJavaScript(script);
     }
-  }, [currentLocation, geofence]);
+  }, [geofence]); // Only depend on geofence, not currentLocation
 
   return (
     <View style={styles.container}>
@@ -517,7 +576,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       {/* Leaflet Map */}
       <WebView
         ref={webViewRef}
-        key={`map-${geofence && geofence.geofence_id ? geofence.geofence_id : 'no-geofence'}-${isLoading ? 'loading' : 'loaded'}`}
+        key={`map-${geofence && geofence.geofence_id ? geofence.geofence_id : 'no-geofence'}`}
         source={{ html: getLeafletMapHTML(mapCenter, geofence, currentLocation) }}
         style={styles.map}
         javaScriptEnabled={true}
