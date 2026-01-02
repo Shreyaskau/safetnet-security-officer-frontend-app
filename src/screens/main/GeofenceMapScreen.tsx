@@ -636,13 +636,17 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
           <>
             <View style={styles.statsRow}>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🔴 {allAlerts.filter((a) => a.priority === 'high').length} Emergency</Text>
+                <Text style={styles.statText}>🔴 {allAlerts.filter((a) => a && a.priority && String(a.priority).toLowerCase() === 'high').length} Emergency</Text>
               </View>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟡 {allAlerts.filter((a) => a.status === 'pending').length} Pending</Text>
+                <Text style={styles.statText}>🟡 {allAlerts.filter((a) => a && a.status && String(a.status).toLowerCase() === 'pending').length} Pending</Text>
               </View>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟢 {allAlerts.filter((a) => a.status === 'completed').length} Completed</Text>
+                <Text style={styles.statText}>🟢 {allAlerts.filter((a) => {
+                  if (!a || !a.status) return false;
+                  const status = String(a.status).toLowerCase();
+                  return status === 'completed' || status === 'resolved';
+                }).length} Completed</Text>
               </View>
             </View>
             <TouchableOpacity style={styles.viewButton}>

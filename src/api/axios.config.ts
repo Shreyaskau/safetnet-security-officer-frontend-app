@@ -1,9 +1,11 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import apiConfig from './config';
+
 // Hardened Axios config for mobile + Render + TLS handshake
 const axiosInstance = axios.create({
-  baseURL: 'https://safetnet-backend.onrender.com/api/security',
+  baseURL: `${apiConfig.BASE_URL}/api/security`,
   timeout: 20000, // 20 seconds - Mobile + Render + TLS handshake = slow first request
   headers: {
     'Content-Type': 'application/json',

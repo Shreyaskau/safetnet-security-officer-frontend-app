@@ -57,6 +57,8 @@ allprojects {
             force "org.jetbrains.kotlin:kotlin-gradle-plugin-api:1.9.22"
             force "org.jetbrains.kotlin:kotlin-gradle-plugin-idea:1.9.22"
             force "org.jetbrains.kotlin:kotlin-scripting-jvm:1.9.22"
+            // Force Google Play Services Location version to prevent class/interface mismatch
+            force "com.google.android.gms:play-services-location:21.0.1"
         }
     }
 }
@@ -68,3 +70,9 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+subprojects {
+    project.ext {
+        googlePlayServicesVersion = "21.0.1"
+    }
+}

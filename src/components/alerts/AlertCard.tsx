@@ -19,7 +19,9 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
   const isEmergency = alert.original_alert_type === 'emergency' || 
                       alert.original_alert_type === 'warning' ||
                       alert.alert_type === 'emergency';
-  const isCompleted = alert.status === 'completed';
+  // Check if alert is completed or resolved (handle both statuses, case-insensitive)
+  const alertStatus = alert.status ? String(alert.status).toLowerCase() : '';
+  const isCompleted = alertStatus === 'completed' || alertStatus === 'resolved';
   const isAccepted = alert.status === 'accepted';
 
   const handleDelete = () => {
@@ -129,13 +131,13 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
     if (isCompleted) {
       return {
         backgroundColor: colors.badgeGreenBg,
-        text: '✓ COMPLETED',
+        text: '✓ SOLVED',
         textColor: colors.successGreen,
       };
     }
     return {
       backgroundColor: colors.badgeBlueBg,
-      text: '🔔 NORMAL',
+      text: '🔔 ACTIVE',
       textColor: colors.infoBlue,
     };
   };
@@ -168,6 +170,12 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
       />
 
       <View style={styles.cardContent}>
+        {/* Status Badge - Shows SOLVED for completed alerts, ACTIVE/EMERGENCY for remaining */}
+        <View style={[styles.badge, { backgroundColor: badgeStyle.backgroundColor }]}>
+          <Text style={[styles.badgeText, { color: badgeStyle.textColor }]}>
+            {badgeStyle.text}
+          </Text>
+        </View>
         <View style={styles.content}>
           {/* Alert Type and Priority Details */}
           <View style={styles.alertDetailsRow}>
@@ -221,19 +229,10 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
         {/* Bottom buttons section */}
         {isCompleted ? (
           <View style={styles.completedActions}>
-            <Text style={styles.completedStatus}>
-              Completed {formatRelativeTime(alert.updated_at || alert.timestamp)}
-            </Text>
-            {onDelete && (
-              <TouchableOpacity
-                style={styles.deleteButtonBottom}
-                onPress={handleDelete}
-                activeOpacity={0.7}
-              >
-                <Icon name="delete" size={18} color={colors.emergencyRed} />
-                <Text style={styles.deleteButtonText}>DELETE</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.solvedBadge}>
+              <Icon name="check-circle" size={18} color={colors.successGreen} />
+              <Text style={styles.solvedBadgeText}>SOLVED</Text>
+            </View>
           </View>
         ) : isAccepted ? (
           <View style={styles.acceptedActions}>
@@ -244,7 +243,7 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
                 activeOpacity={0.7}
               >
                 <Icon name="check-circle" size={18} color={colors.white} />
-                <Text style={styles.solveButtonText}>SOLVED</Text>
+                <Text style={styles.solveButtonText}>MARK SOLVED</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.acceptedBadge}>
@@ -463,17 +462,28 @@ const styles = StyleSheet.create({
   completedActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border || '#E5E7EB',
   },
-  completedStatus: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '400',
-    color: colors.captionText,
+  solvedBadge: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.badgeGreenBg,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  solvedBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.successGreen,
+    letterSpacing: 0.5,
   },
   acceptedActions: {
     flexDirection: 'row',

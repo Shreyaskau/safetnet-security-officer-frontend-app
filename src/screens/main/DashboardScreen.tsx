@@ -13,7 +13,7 @@ import { useAlerts } from '../../hooks/useAlerts';
 import { Alert } from '../../types/alert.types';
 import { colors, typography, spacing } from '../../utils';
 export const DashboardScreen = ({ navigation }: any) => {
-  const { alerts } = useAlerts();
+  const { alerts, allAlerts } = useAlerts();
 
   const handleRespond = (alert: Alert) => {
     navigation.navigate('AlertResponse', { alert });
@@ -22,10 +22,20 @@ export const DashboardScreen = ({ navigation }: any) => {
   // Use only real data, no sample data fallback
   const displayAlerts = alerts;
 
+  // Use allAlerts for stats counts (not filtered alerts) to show accurate totals
+  // Handle both 'completed' and 'resolved' statuses (backend may use either)
   const stats = {
-    active: displayAlerts.filter((a) => a.status === 'pending' || a.status === 'accepted').length,
-    pending: displayAlerts.filter((a) => a.status === 'pending').length,
-    resolved: displayAlerts.filter((a) => a.status === 'completed').length,
+    active: allAlerts.filter((a) => {
+      if (!a || !a.status) return false;
+      const status = String(a.status).toLowerCase();
+      return status === 'pending' || status === 'accepted';
+    }).length,
+    pending: allAlerts.filter((a) => a && a.status && String(a.status).toLowerCase() === 'pending').length,
+    resolved: allAlerts.filter((a) => {
+      if (!a || !a.status) return false;
+      const status = String(a.status).toLowerCase();
+      return status === 'completed' || status === 'resolved';
+    }).length,
   };
 
   // Get 4 most recent alerts

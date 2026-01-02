@@ -66,6 +66,9 @@ export const AlertsScreen = ({ navigation, route }: any) => {
       // Alert status is updated immediately and will appear in "Completed" filter
       // The alert list will refresh automatically
       console.log('[AlertsScreen] Alert marked as completed, refreshing list...');
+      // Optionally switch to "Completed" filter to show the solved alert
+      // Uncomment the line below if you want to auto-switch to Completed filter after solving
+      // changeFilter('completed');
     } catch (error: any) {
       console.error('Error solving alert:', error);
     }
@@ -75,12 +78,21 @@ export const AlertsScreen = ({ navigation, route }: any) => {
   const displayAlerts = alerts;
   
   // Calculate stats from ALL alerts (not filtered) to show accurate counts
+  // Handle both 'completed' and 'resolved' statuses (backend may use either)
   const allAlertsForStats = allAlerts || alerts;
 
   const stats = {
-    active: allAlertsForStats.filter((a) => a.status === 'pending' || a.status === 'accepted').length,
-    pending: allAlertsForStats.filter((a) => a.status === 'pending').length,
-    resolved: allAlertsForStats.filter((a) => a.status === 'completed').length,
+    active: allAlertsForStats.filter((a) => {
+      if (!a || !a.status) return false;
+      const status = String(a.status).toLowerCase();
+      return status === 'pending' || status === 'accepted';
+    }).length,
+    pending: allAlertsForStats.filter((a) => a && a.status && String(a.status).toLowerCase() === 'pending').length,
+    resolved: allAlertsForStats.filter((a) => {
+      if (!a || !a.status) return false;
+      const status = String(a.status).toLowerCase();
+      return status === 'completed' || status === 'resolved';
+    }).length,
   };
 
   const filters = [

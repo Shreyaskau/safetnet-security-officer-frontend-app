@@ -32,13 +32,13 @@ export const geofenceService = {
       // Reduced from 14 to 3 most common patterns to reduce warning spam
       const possibleEndpoints: Array<{ url: string; method: 'GET' | 'POST'; data?: any }> = [
         // Pattern 1: GET with ID in path (RESTful) - Most common Django pattern
-        { url: `/api/security/geofence/${geofenceIdStr}/`, method: 'GET' },
+        { url: `/geofence/${geofenceIdStr}/`, method: 'GET' },
         
         // Pattern 2: GET without ID (uses JWT token to get current user's geofence)
-        { url: `/api/security/geofence/`, method: 'GET' },
+        { url: `/geofence/`, method: 'GET' },
         
-        // Pattern 3: Alternative path
-        { url: `/api/geofence/${geofenceIdStr}/`, method: 'GET' },
+        // Pattern 3: Alternative path (if backend has different routing)
+        { url: `/geofence/${geofenceIdStr}/`, method: 'GET' },
       ];
       
       let lastError: any = null;
@@ -109,12 +109,12 @@ export const geofenceService = {
             console.log('[Geofence] Retrying with profile geofence_id:', profileGeofenceId);
             
             try {
-              const retryResponse = await axiosInstance.get(`/api/security/geofence/${profileGeofenceId}/`);
+              const retryResponse = await axiosInstance.get(`/geofence/${profileGeofenceId}/`);
               response = retryResponse;
               console.log('[Geofence] ✅ Success with profile geofence_id retry!');
             } catch (retryError: any) {
               console.error('[Geofence] Retry also failed:', retryError?.response?.status);
-              throw new Error(`Geofence API endpoint not found. Profile has geofence_id: ${profileGeofenceId}, but GET /api/security/geofence/${profileGeofenceId}/ returns 404. Please check your backend URL routing.`);
+              throw new Error(`Geofence API endpoint not found. Profile has geofence_id: ${profileGeofenceId}, but GET /geofence/${profileGeofenceId}/ returns 404. Please check your backend URL routing.`);
             }
           } else if (profileData?.officer_geofence) {
             // Profile has geofence name but not ID or details
@@ -125,7 +125,7 @@ export const geofenceService = {
             
             try {
               // Try fetching by name from backend
-              const nameResponse = await axiosInstance.get(`/api/security/geofence/?name=${encodeURIComponent(geofenceName)}`);
+              const nameResponse = await axiosInstance.get(`/geofence/?name=${encodeURIComponent(geofenceName)}`);
               if (nameResponse.data && (nameResponse.data.id || nameResponse.data.geofence_id)) {
                 console.log('[Geofence] ✅ Successfully fetched geofence by name from backend');
                 // Process the response the same way as ID-based fetch
@@ -139,7 +139,7 @@ export const geofenceService = {
               console.error('[Geofence] Failed to fetch geofence by name from backend:', nameError?.response?.status || nameError?.message);
               throw new Error(
                 `Geofence "${geofenceName}" is assigned but geofence details are not available from backend. ` +
-                `Please ensure GET /api/security/geofence/{id}/ or GET /api/security/geofence/?name={name} endpoint is implemented.`
+                `Please ensure GET /geofence/{id}/ or GET /geofence/?name={name} endpoint is implemented.`
               );
             }
           } else {
@@ -147,7 +147,7 @@ export const geofenceService = {
             console.error('[Geofence] Available profile fields:', Object.keys(profileData).join(', '));
             throw new Error(
               `Geofence API endpoint not found and profile has no geofence data. ` +
-              `Please implement GET /api/security/geofence/{id}/ endpoint in your backend to fetch geofence details.`
+              `Please implement GET /geofence/{id}/ endpoint in your backend to fetch geofence details.`
             );
           }
         } catch (profileError: any) {
@@ -158,7 +158,7 @@ export const geofenceService = {
           console.error('[Geofence] Profile fallback failed:', profileError.message);
           throw new Error(
             `Cannot fetch geofence details. Geofence API endpoints are not available. ` +
-            `Please implement GET /api/security/geofence/{id}/ endpoint in your backend.`
+            `Please implement GET /geofence/{id}/ endpoint in your backend.`
           );
         }
       }

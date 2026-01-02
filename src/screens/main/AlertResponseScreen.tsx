@@ -646,16 +646,94 @@ const getAlertMapHTML = (
     ? `[[${officerLocation.latitude}, ${officerLocation.longitude}], [${userLocation.latitude}, ${userLocation.longitude}]]`
     : '[]';
 
+  // Determine alert marker color and icon
+  const isHighPriority = alert.priority?.toLowerCase() === 'high';
+  const alertType = alert.original_alert_type || alert.alert_type;
+  let alertMarkerColor = '#3b82f6'; // Default blue
+  let alertIcon = 'warning'; // Default icon
+  
+  if (isHighPriority || alertType === 'emergency') {
+    alertMarkerColor = '#ef4444'; // Red for emergency
+    alertIcon = 'warning';
+  } else if (alertType === 'warning') {
+    alertMarkerColor = '#fbbf24'; // Yellow for warning
+    alertIcon = 'warning';
+  } else {
+    alertMarkerColor = '#3b82f6'; // Blue for general
+    alertIcon = 'notifications';
+  }
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     body { margin: 0; padding: 0; }
     #map { width: 100%; height: 100vh; }
+    .material-icons {
+      font-family: 'Material Icons';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 40px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-feature-settings: 'liga';
+      -webkit-font-smoothing: antialiased;
+    }
+    .emergency-marker {
+      background-color: ${alertMarkerColor};
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      border: 3px solid white;
+      z-index: 2;
+    }
+    .emergency-marker .material-icons {
+      color: white;
+      font-size: 28px;
+    }
+    .officer-marker {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4), 0 1px 3px rgba(0,0,0,0.2);
+      border: 2px solid white;
+      position: relative;
+      z-index: 1;
+    }
+    .officer-marker::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(37, 99, 235, 0.3));
+      z-index: -1;
+    }
+    .officer-marker .material-icons {
+      color: white;
+      font-size: 18px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
   </style>
 </head>
 <body>
@@ -675,29 +753,29 @@ const getAlertMapHTML = (
       maxZoom: 19
     }).addTo(map);
     
-    // Add user location marker (emergency)
+    // Add user location marker (emergency) with Material Icon
     const userMarker = L.marker(userLoc, {
       icon: L.divIcon({
         className: 'emergency-marker',
-        html: '<div style="font-size: 40px;">🚨</div>',
-        iconSize: [40, 40],
-        iconAnchor: [20, 40]
+        html: '<div class="emergency-marker"><span class="material-icons">${alertIcon}</span></div>',
+        iconSize: [50, 50],
+        iconAnchor: [25, 50]
       })
     }).addTo(map);
-    userMarker.bindPopup('${(alert.user_name || 'User').replace(/'/g, "\\'")}<br/>Emergency Location');
+    userMarker.bindPopup('${(alert.user_name || 'User').replace(/'/g, "\\'")}<br/>Alert Location');
     
-    // Add officer location marker if available
+    // Add officer location marker if available with Material Icon
     let officerMarker = null;
     if (officerLoc) {
       officerMarker = L.marker(officerLoc, {
         icon: L.divIcon({
           className: 'officer-marker',
-          html: '<div style="font-size: 35px;">🛡️</div>',
-          iconSize: [35, 35],
-          iconAnchor: [17, 35]
+          html: '<div class="officer-marker"><span class="material-icons">my_location</span></div>',
+          iconSize: [32, 32],
+          iconAnchor: [16, 32]
         })
       }).addTo(map);
-      officerMarker.bindPopup('You<br/>Your Location');
+      officerMarker.bindPopup('Security Officer<br/>Your Location');
     }
     
     // Add route polyline if officer location is available

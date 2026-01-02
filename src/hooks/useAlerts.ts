@@ -226,9 +226,12 @@ export const useAlerts = () => {
       
       return isHighPriority;
     }
-    if (filter === 'normal') return alert.status === 'accepted'; // Accepted alerts (status === 'accepted')
-    if (filter === 'pending') return alert.status === 'pending';
-    if (filter === 'completed') return alert.status === 'completed';
+    // Make status comparisons case-insensitive to handle 'Completed', 'COMPLETED', 'completed', etc.
+    // Also handle 'resolved' as equivalent to 'completed' (backend may use either)
+    const alertStatus = alert.status ? String(alert.status).toLowerCase() : '';
+    if (filter === 'normal') return alertStatus === 'accepted'; // Accepted alerts (status === 'accepted')
+    if (filter === 'pending') return alertStatus === 'pending';
+    if (filter === 'completed') return alertStatus === 'completed' || alertStatus === 'resolved';
     return true;
   });
   

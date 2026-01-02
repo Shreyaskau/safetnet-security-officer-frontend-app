@@ -1,77 +1,77 @@
 /**
  * Security Officer API Endpoints
- * Base URL: /api/security/
- * All endpoints are relative to the base URL configured in axios.config.ts
+ * Base URL: /api/security/ (configured in axios.config.ts)
+ * All endpoints are relative to the base URL - DO NOT include /api/security/ prefix
  */
 export const API_ENDPOINTS = {
   // ==================== AUTHENTICATION ====================
-  LOGIN: '/api/security/login/',
-  LOGOUT: '/api/security/logout/', // Optional - may not exist on backend (404 is handled gracefully)
-  REFRESH_TOKEN: '/api/security/token/refresh/', // Optional - may not exist on backend (404 is handled gracefully)
-  FORGOT_PASSWORD: '/api/security/password-reset/', // Password reset - sends email to user
+  LOGIN: '/login/',
+  LOGOUT: '/logout/', // Optional - may not exist on backend (404 is handled gracefully)
+  REFRESH_TOKEN: '/token/refresh/', // Optional - may not exist on backend (404 is handled gracefully)
+  FORGOT_PASSWORD: '/password-reset/', // Password reset - sends email to user
 
   // ==================== PROFILE ====================
-  GET_PROFILE: '/api/security/profile/',
-  UPDATE_PROFILE: '/api/security/profile/', // PATCH
+  GET_PROFILE: '/profile/',
+  UPDATE_PROFILE: '/profile/', // PATCH
 
   // ==================== SOS ALERTS ====================
   // Note: These match the documented API - using /sos/ instead of /alerts/
-  LIST_SOS: '/api/security/sos/',
-  GET_SOS: '/api/security/sos/{id}/',
-  UPDATE_SOS: '/api/security/sos/{id}/', // PATCH/PUT
-  DELETE_SOS: '/api/security/sos/{id}/', // DELETE
-  RESOLVE_SOS: '/api/security/sos/{id}/resolve/', // PATCH
-  GET_ACTIVE_SOS: '/api/security/sos/active/',
-  GET_RESOLVED_SOS: '/api/security/sos/resolved/',
+  LIST_SOS: '/sos/',
+  GET_SOS: '/sos/{id}/',
+  UPDATE_SOS: '/sos/{id}/', // PATCH/PUT
+  DELETE_SOS: '/sos/{id}/', // DELETE
+  RESOLVE_SOS: '/sos/{id}/resolve/', // PATCH
+  GET_ACTIVE_SOS: '/sos/active/',
+  GET_RESOLVED_SOS: '/sos/resolved/',
 
   // Legacy alerts endpoints (for backward compatibility)
-  GET_SECURITY_ALERTS: '/api/security/alerts/', // Maps to /sos/
-  GET_ALERT_DETAILS: '/api/security/alerts/{id}/',
-  ACCEPT_ALERT: '/api/security/alerts/{id}/accept/',
-  CLOSE_ALERT: '/api/security/alerts/{id}/close/',
+  GET_SECURITY_ALERTS: '/alerts/', // Maps to /sos/
+  GET_ALERT_DETAILS: '/alerts/{id}/',
+  ACCEPT_ALERT: '/alerts/{id}/accept/',
+  CLOSE_ALERT: '/alerts/{id}/close/',
 
   // ==================== CASES ====================
-  LIST_CASES: '/api/security/case/',
-  GET_CASE: '/api/security/case/{id}/',
-  CREATE_CASE: '/api/security/case/', // POST
-  UPDATE_CASE: '/api/security/case/{id}/', // PATCH/PUT
-  UPDATE_CASE_STATUS: '/api/security/case/{id}/update_status/', // PATCH
-  ACCEPT_CASE: '/api/security/case/{id}/accept/', // POST
-  REJECT_CASE: '/api/security/case/{id}/reject/', // POST
-  RESOLVE_CASE: '/api/security/case/{id}/resolve/', // POST
+  LIST_CASES: '/case/',
+  GET_CASE: '/case/{id}/',
+  CREATE_CASE: '/case/', // POST
+  UPDATE_CASE: '/case/{id}/', // PATCH/PUT
+  UPDATE_CASE_STATUS: '/case/{id}/update_status/', // PATCH
+  ACCEPT_CASE: '/case/{id}/accept/', // POST
+  REJECT_CASE: '/case/{id}/reject/', // POST
+  RESOLVE_CASE: '/case/{id}/resolve/', // POST
 
   // ==================== INCIDENTS ====================
-  LIST_INCIDENTS: '/api/security/incidents/',
-  CREATE_INCIDENT: '/api/security/incidents/', // POST
+  LIST_INCIDENTS: '/incidents/',
+  CREATE_INCIDENT: '/incidents/', // POST
 
   // ==================== NOTIFICATIONS ====================
-  LIST_NOTIFICATIONS: '/api/security/notifications/',
-  ACKNOWLEDGE_NOTIFICATIONS: '/api/security/notifications/acknowledge/', // POST
+  LIST_NOTIFICATIONS: '/notifications/',
+  ACKNOWLEDGE_NOTIFICATIONS: '/notifications/acknowledge/', // POST
   
   // Legacy notifications endpoint
-  NOTIFICATIONS: '/api/security/notifications/',
+  NOTIFICATIONS: '/notifications/',
 
   // ==================== DASHBOARD ====================
-  DASHBOARD: '/api/security/dashboard/',
+  DASHBOARD: '/dashboard/',
 
   // ==================== NAVIGATION ====================
-  NAVIGATION: '/api/security/navigation/',
+  NAVIGATION: '/navigation/',
 
   // ==================== LIVE LOCATION ====================
-  START_LIVE_LOCATION: '/api/security/live_location/', // POST
-  GET_LIVE_LOCATION_SESSIONS: '/api/security/live_location/', // GET
-  UPDATE_LIVE_LOCATION: '/api/security/live_location/{session_id}/', // PATCH
-  STOP_LIVE_LOCATION: '/api/security/live_location/{session_id}/', // DELETE
+  START_LIVE_LOCATION: '/live_location/', // POST
+  GET_LIVE_LOCATION_SESSIONS: '/live_location/', // GET
+  UPDATE_LIVE_LOCATION: '/live_location/{session_id}/', // PATCH
+  STOP_LIVE_LOCATION: '/live_location/{session_id}/', // DELETE
 
   // ==================== LEGACY/ADDITIONAL (not in documented API) ====================
   // These are kept for backward compatibility or may be used by frontend
   // NOTE: These endpoints may not exist - use live_location endpoints instead
-  UPDATE_LOCATION: '/api/security/live_location/', // Maps to live_location
-  GET_USER_LOCATION: '/api/security/live_location/', // User location might be in SOS alert data
-  GET_GEOFENCE_DETAILS: '/api/security/geofence/',
-  GET_USERS_IN_AREA: '/api/security/geofence/users/',
-  SEND_BROADCAST: '/api/security/broadcast/',
-  GET_LOGS: '/api/security/logs/', // May map to incidents or cases
+  UPDATE_LOCATION: '/live_location/', // Maps to live_location
+  GET_USER_LOCATION: '/live_location/', // User location might be in SOS alert data
+  GET_GEOFENCE_DETAILS: '/geofence/',
+  GET_USERS_IN_AREA: '/geofence/users/',
+  SEND_BROADCAST: '/broadcast/',
+  GET_LOGS: '/logs/', // May map to incidents or cases
 };
 
 
