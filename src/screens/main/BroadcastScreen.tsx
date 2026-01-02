@@ -8,28 +8,35 @@ import {
   Switch,
   ScrollView,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAppSelector } from '../../redux/hooks';
 import { Button } from '../../components/common/Button';
 import { BroadcastProgressModal } from '../../components/modals/BroadcastProgressModal';
 import { broadcastService } from '../../api/services/broadcastService';
+import { profileService } from '../../api/services/profileService';
+import { geofenceService } from '../../api/services/geofenceService';
 import { requestLocationPermission } from '../../utils/permissions';
+import { useAlerts } from '../../hooks/useAlerts';
 import { colors, typography, spacing } from '../../utils';
 import Toast from 'react-native-toast-message';
 
 export const BroadcastScreen = ({ navigation }: any) => {
   const officer = useAppSelector((state) => state.auth.officer);
-  const [message, setMessage] = useState('');
-  const [alertType, setAlertType] = useState<'general' | 'warning' | 'all_clear'>('general');
-  const [highPriority, setHighPriority] = useState(false);
+  const { refreshAlerts } = useAlerts();
+  const [message, setMessage] = useState('I need help, some one following me');
+  const [alertType, setAlertType] = useState<'general' | 'warning' | 'emergency'>('general');
   const [showProgress, setShowProgress] = useState(false);
   const [broadcastProgress, setBroadcastProgress] = useState(0);
   const [totalUsers] = useState(24);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
 
+  // Automatically set high priority for emergency alerts
+  const highPriority = alertType === 'emergency';
+
   const alertTypes = [
-    { key: 'general' as const, label: '🔔 General Notice', icon: '🔔' },
-    { key: 'warning' as const, label: '⚠️ Warning', icon: '⚠️' },
-    { key: 'all_clear' as const, label: '✅ All Clear', icon: '✅' },
+    { key: 'general' as const, label: 'General Notice', icon: 'notifications' },
+    { key: 'warning' as const, label: 'Warning', icon: 'warning' },
+    { key: 'emergency' as const, label: 'Emergency', icon: 'emergency' },
   ];
 
   const quickTemplates = [
@@ -92,20 +99,98 @@ export const BroadcastScreen = ({ navigation }: any) => {
         return;
       }
 
-      // Send broadcast - location will be fetched by broadcastService automatically
+      // Get geofence_id - use from officer or fetch from profile/geofence service if empty
+      // IMPORTANT: Backend expects numeric geofence_id, not name string
+      let geofenceId = officer.geofence_id;
+      
+      // Check if geofence_id is empty or not numeric
+      if (!geofenceId || geofenceId === '' || geofenceId === '0' || isNaN(Number(geofenceId))) {
+        console.log('[BroadcastScreen] geofence_id is empty or not numeric, fetching geofence details...');
+        try {
+          // First try to get geofence name from profile
+          const profile = await profileService.getProfile(officer.security_id);
+          console.log('[BroadcastScreen] Profile data:', JSON.stringify(profile, null, 2));
+          
+          const geofenceName = (profile as any)?.officer_geofence || 
+                              (profile as any)?.geofence_name ||
+                              (profile as any)?.assigned_geofence?.name ||
+                              '';
+          
+          // Try to get numeric ID from assigned_geofence object (if profile has it)
+          const assignedGeofence = (profile as any)?.assigned_geofence;
+          if (assignedGeofence?.id) {
+            geofenceId = String(assignedGeofence.id);
+            console.log('[BroadcastScreen] ✅ Got numeric geofence_id from assigned_geofence.id:', geofenceId);
+          } else if (geofenceName) {
+            // If we have geofence name but not ID, fetch geofence details to get the ID
+            console.log('[BroadcastScreen] Found geofence name:', geofenceName, '- fetching details to get ID...');
+            try {
+              const geofenceDetails = await geofenceService.getGeofenceDetails(geofenceName);
+              // Extract ID from geofence_id field (should be numeric)
+              if (geofenceDetails.geofence_id && !isNaN(Number(geofenceDetails.geofence_id))) {
+                geofenceId = String(geofenceDetails.geofence_id);
+                console.log('[BroadcastScreen] ✅ Got numeric geofence_id from geofence details:', geofenceId);
+              } else {
+                console.warn('[BroadcastScreen] ⚠️ Geofence details returned non-numeric ID:', geofenceDetails.geofence_id);
+              }
+            } catch (geofenceError: any) {
+              console.warn('[BroadcastScreen] Failed to fetch geofence details:', geofenceError.message);
+              // Check if geofenceService returned data with assigned_geofence
+              if (geofenceError?.response?.data?.assigned_geofence?.id) {
+                geofenceId = String(geofenceError.response.data.assigned_geofence.id);
+                console.log('[BroadcastScreen] ✅ Got numeric geofence_id from error response:', geofenceId);
+              }
+            }
+          } else {
+            console.warn('[BroadcastScreen] No geofence name found in profile');
+          }
+        } catch (profileError) {
+          console.warn('[BroadcastScreen] Failed to fetch profile for geofence_id:', profileError);
+        }
+      }
+      
+      // Final validation
+      if (geofenceId && isNaN(Number(geofenceId))) {
+        console.warn('[BroadcastScreen] ⚠️ WARNING: geofence_id is still not numeric:', geofenceId);
+        console.warn('[BroadcastScreen] Backend might reject this or set geofence to null');
+        // Try to extract ID from geofence name by fetching geofence details one more time
+        try {
+          const geofenceDetails = await geofenceService.getGeofenceDetails(geofenceId);
+          if (geofenceDetails.geofence_id && !isNaN(Number(geofenceDetails.geofence_id))) {
+            geofenceId = String(geofenceDetails.geofence_id);
+            console.log('[BroadcastScreen] ✅ Finally got numeric geofence_id:', geofenceId);
+          }
+        } catch (finalError) {
+          console.error('[BroadcastScreen] Could not convert geofence name to ID:', finalError);
+        }
+      }
+      
+      console.log('[BroadcastScreen] Final geofence_id to send:', geofenceId, '(type:', typeof geofenceId, ', isNumeric:', !isNaN(Number(geofenceId)), ')');
 
       // Send broadcast - location will be fetched by broadcastService if not provided
-      await broadcastService.sendBroadcast({
+      const broadcastResult = await broadcastService.sendBroadcast({
         security_id: officer.security_id,
-        geofence_id: officer.geofence_id,
+        geofence_id: geofenceId || '',
         message: message.trim(),
         alert_type: alertType,
         priority: highPriority,
         // location_lat and location_long will be fetched by service if not provided
       });
 
+      console.log('[BroadcastScreen] Broadcast sent successfully:', broadcastResult);
+
       clearInterval(progressInterval);
       setBroadcastProgress(100);
+
+      // Refresh alerts after successful broadcast
+      try {
+        console.log('[BroadcastScreen] Refreshing alerts after broadcast...');
+        await refreshAlerts();
+        console.log('[BroadcastScreen] Alerts refreshed');
+      } catch (refreshError) {
+        console.warn('[BroadcastScreen] Failed to refresh alerts:', refreshError);
+        // Don't fail the broadcast if refresh fails
+      }
 
       setTimeout(() => {
         setShowProgress(false);
@@ -149,12 +234,6 @@ export const BroadcastScreen = ({ navigation }: any) => {
       </View>
 
       <ScrollView style={styles.content}>
-        <View style={styles.infoBanner}>
-          <Text style={styles.infoText}>
-            ℹ️ Message will be sent to all 24 active users in your area
-          </Text>
-        </View>
-
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ALERT TYPE</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -167,6 +246,12 @@ export const BroadcastScreen = ({ navigation }: any) => {
                 ]}
                 onPress={() => setAlertType(type.key)}
               >
+                <Icon
+                  name={type.icon}
+                  size={20}
+                  color={alertType === type.key ? colors.white : colors.darkText}
+                  style={styles.alertTypeIcon}
+                />
                 <Text
                   style={[
                     styles.alertTypeText,
@@ -181,9 +266,10 @@ export const BroadcastScreen = ({ navigation }: any) => {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>MESSAGE</Text>
           <TextInput
             style={styles.messageInput}
-            placeholder="Type your message..."
+            placeholder="Type your message"
             placeholderTextColor={colors.mediumGray}
             multiline
             numberOfLines={8}
@@ -226,36 +312,6 @@ export const BroadcastScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             ))}
           </ScrollView>
-        </View>
-
-        <View style={styles.recipientsCard}>
-          <Text style={styles.recipientsIcon}>👥</Text>
-          <View style={styles.recipientsInfo}>
-            <Text style={styles.recipientsTitle}>
-              Broadcasting to 24 active users
-            </Text>
-            <Text style={styles.recipientsSubtitle}>
-              All users in Downtown District - Zone 3
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.priorityCard}>
-          <View style={styles.priorityLeft}>
-            <Text style={styles.priorityTitle}>High Priority Alert</Text>
-            <Text style={styles.prioritySubtitle}>
-              Sends as push notification with sound
-            </Text>
-          </View>
-          <Switch
-            value={highPriority}
-            onValueChange={setHighPriority}
-            trackColor={{
-              false: colors.mediumGray,
-              true: colors.emergencyRed,
-            }}
-            thumbColor={colors.white}
-          />
         </View>
       </ScrollView>
 
@@ -325,6 +381,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   alertTypePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm,
     borderRadius: 18,
@@ -335,6 +393,9 @@ const styles = StyleSheet.create({
   selectedPill: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+  },
+  alertTypeIcon: {
+    marginRight: spacing.xs,
   },
   alertTypeText: {
     ...typography.buttonLarge,
@@ -356,6 +417,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     textAlign: 'right',
     marginTop: spacing.xs,
+  },
+  requiredText: {
+    ...typography.caption,
+    color: colors.emergencyRed || colors.error || '#FF0000',
+    marginTop: spacing.xs,
+    fontSize: 12,
   },
   templatePill: {
     paddingHorizontal: spacing.md,

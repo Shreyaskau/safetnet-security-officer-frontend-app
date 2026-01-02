@@ -12,9 +12,9 @@ interface TabItem {
 }
 
 const tabs: TabItem[] = [
-  { name: 'Dashboard', label: 'Dashboard', icon: 'dashboard', activeIcon: 'dashboard' },
+  { name: 'Dashboard', label: 'Home', icon: 'dashboard', activeIcon: 'dashboard' },
   { name: 'Alerts', label: 'Alerts', icon: 'notifications-none', activeIcon: 'notifications' },
-  { name: 'Logs', label: 'Logs', icon: 'description', activeIcon: 'description' },
+  { name: 'GeofenceArea', label: 'Map', icon: 'map', activeIcon: 'map' },
   { name: 'Profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
@@ -47,8 +47,8 @@ export const BottomTabNavigator = () => {
         navigation.navigate('Home' as never);
       } else if (tabName === 'Alerts') {
         navigation.navigate('Alerts' as never);
-      } else if (tabName === 'Logs') {
-        navigation.navigate('Logs' as never);
+      } else if (tabName === 'GeofenceArea') {
+        navigation.navigate('GeofenceArea' as never);
       } else if (tabName === 'Profile') {
         navigation.navigate('Profile' as never);
       }
@@ -65,7 +65,8 @@ export const BottomTabNavigator = () => {
           activeRoute === tab.name || 
           (tab.name === 'Dashboard' && activeRoute === 'Home') ||
           (tab.name === 'Alerts' && activeRoute === 'Alerts') ||
-          (tab.name === 'Logs' && activeRoute === 'Logs');
+          (tab.name === 'GeofenceArea' && activeRoute === 'GeofenceArea') ||
+          (tab.name === 'Profile' && activeRoute === 'Profile');
         
         return (
           <TouchableOpacity

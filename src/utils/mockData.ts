@@ -224,7 +224,7 @@ export const getMockOfficer = (emailOrBadge: string): SecurityOfficer | null => 
   return officerData ? officerData.officer : null;
 };
 
-// Mock geofence data
+// Mock geofence data (only used when ENABLE_API_CALLS is false)
 const MOCK_GEOFENCES: Record<string, GeofenceArea> = {
   GEO001: {
     geofence_id: 'GEO001',
@@ -282,7 +282,7 @@ const MOCK_GEOFENCES: Record<string, GeofenceArea> = {
   },
 };
 
-// Mock geofence function
+// Mock geofence function (only used when ENABLE_API_CALLS is false)
 export const getMockGeofence = async (geofenceId: string): Promise<GeofenceArea> => {
   // Simulate network delay
   await new Promise((resolve) => setTimeout(resolve, 500));

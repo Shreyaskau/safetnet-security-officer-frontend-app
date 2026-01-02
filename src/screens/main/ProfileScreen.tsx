@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,19 +7,156 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAppSelector, useAppDispatch } from '../../redux/hooks';
-import { logout } from '../../redux/slices/authSlice';
+import { logout, updateOfficerProfile } from '../../redux/slices/authSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { LogoutModal } from '../../components/modals/LogoutModal';
 import { colors, shadows } from '../../utils';
 import { PerformanceChart } from '../../components/charts/PerformanceChart';
+import { profileService } from '../../api/services/profileService';
+import { geofenceService } from '../../api/services/geofenceService';
 
 export const ProfileScreen = ({ navigation }: any) => {
   const officer = useAppSelector((state) => state.auth.officer);
   const dispatch = useAppDispatch();
   const { logout: logoutUser } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [profileData, setProfileData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [geofenceName, setGeofenceName] = useState<string>('');
+
+  // Function to fetch profile data
+  const fetchProfileData = useCallback(async () => {
+    if (!officer?.security_id) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      console.log('[ProfileScreen] Fetching profile data for:', officer.security_id);
+      
+      // Fetch profile from API
+      const profile: any = await profileService.getProfile(officer.security_id);
+      console.log('[ProfileScreen] Profile data received:', JSON.stringify(profile, null, 2));
+      
+      // Extract phone number from various possible backend fields
+      // Check all possible locations including nested user objects
+      const phoneNumber = 
+        // Direct profile fields
+        profile.mobile || 
+        profile.phone || 
+        profile.officer_phone || 
+        profile.phone_number ||
+        profile.contact_number ||
+        profile.contact_phone ||
+        profile.phone_no ||
+        profile.contact ||
+        // Nested user object fields (common in Django REST Framework)
+        profile.user?.mobile ||
+        profile.user?.phone ||
+        profile.user?.phone_number ||
+        profile.user?.contact_number ||
+        // SecurityOfficer model fields (if nested)
+        profile.security_officer?.mobile ||
+        profile.security_officer?.phone ||
+        // Officer profile fields
+        profile.officer?.mobile ||
+        profile.officer?.phone ||
+        // Fallback to Redux officer data
+        officer.mobile || 
+        '';
+      
+      console.log('[ProfileScreen] Phone number extraction (comprehensive):', {
+        'profile.mobile': profile.mobile,
+        'profile.phone': profile.phone,
+        'profile.officer_phone': profile.officer_phone,
+        'profile.phone_number': profile.phone_number,
+        'profile.contact_number': profile.contact_number,
+        'profile.user?.mobile': profile.user?.mobile,
+        'profile.user?.phone': profile.user?.phone,
+        'profile.security_officer?.mobile': profile.security_officer?.mobile,
+        'profile.officer?.mobile': profile.officer?.mobile,
+        'officer.mobile (Redux)': officer.mobile,
+        'extracted_phone': phoneNumber,
+        'profile_keys': Object.keys(profile || {}),
+        'profile.user_keys': profile.user ? Object.keys(profile.user) : 'no user object',
+      });
+      
+      // Merge with existing officer data
+      const fullProfileData = {
+        ...officer,
+        ...profile,
+        // Map backend response fields to our format
+        name: profile.officer_name || 
+              profile.name || 
+              (profile.first_name && profile.last_name ? `${profile.first_name} ${profile.last_name}`.trim() : null) ||
+              profile.first_name ||
+              profile.username ||
+              officer.name,
+        email_id: profile.email_id || profile.email || profile.officer_email || officer.email_id,
+        mobile: phoneNumber, // Use extracted phone number
+        security_role: profile.security_role || profile.role || officer.security_role,
+        badge_number: profile.badge_number || profile.badge_id || officer.badge_number,
+        shift_schedule: profile.shift_schedule || profile.shift || officer.shift_schedule,
+        status: profile.status || (profile.on_duty ? 'active' : 'inactive') || officer.status,
+      };
+      
+      setProfileData(fullProfileData);
+      
+      // Update Redux store with latest profile data
+      dispatch(updateOfficerProfile({
+        name: fullProfileData.name,
+        email_id: fullProfileData.email_id,
+        mobile: fullProfileData.mobile,
+        badge_number: fullProfileData.badge_number,
+        shift_schedule: fullProfileData.shift_schedule,
+        status: fullProfileData.status,
+      }));
+      
+      // Fetch geofence name if geofence_id is available
+      const geofenceId = profile.assigned_geofence?.id || 
+                        profile.geofence_id || 
+                        profile.officer_geofence ||
+                        officer.geofence_id;
+      
+      if (geofenceId) {
+        try {
+          const geofenceDetails = await geofenceService.getGeofenceDetails(String(geofenceId));
+          setGeofenceName(geofenceDetails.name || String(geofenceId));
+        } catch (geofenceError) {
+          // If geofence_id is a name string, use it directly
+          if (typeof geofenceId === 'string' && !geofenceId.match(/^\d+$/)) {
+            setGeofenceName(geofenceId);
+          } else {
+            console.warn('[ProfileScreen] Could not fetch geofence name:', geofenceError);
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('[ProfileScreen] Error fetching profile:', error);
+      // Use existing officer data as fallback
+      setProfileData(officer);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [officer?.security_id, dispatch]);
+
+  // Fetch profile data when component mounts
+  useEffect(() => {
+    fetchProfileData();
+  }, [fetchProfileData]);
+
+  // Refresh profile data when screen comes into focus (e.g., returning from UpdateProfileScreen)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[ProfileScreen] Screen focused, refreshing profile data...');
+      fetchProfileData();
+    }, [fetchProfileData])
+  );
 
   const handleLogout = async () => {
     if (officer) {
@@ -61,14 +198,54 @@ export const ProfileScreen = ({ navigation }: any) => {
     return `${score.toFixed(0)}/${max}`;
   };
 
+  // Sync profileData with Redux officer when Redux updates (e.g., after profile update)
+  // This ensures immediate UI updates when profile is updated from UpdateProfileScreen
+  useEffect(() => {
+    if (officer && profileData) {
+      // Check if Redux officer has updated fields that differ from profileData
+      const hasUpdates = 
+        (officer.name && officer.name !== profileData.name) ||
+        (officer.email_id && officer.email_id !== profileData.email_id) ||
+        (officer.mobile !== undefined && officer.mobile !== profileData.mobile) ||
+        (officer.badge_number !== undefined && officer.badge_number !== profileData.badge_number) ||
+        (officer.shift_schedule !== undefined && officer.shift_schedule !== profileData.shift_schedule);
+      
+      if (hasUpdates) {
+        console.log('[ProfileScreen] Redux officer updated, syncing profileData with:', {
+          name: officer.name,
+          email_id: officer.email_id,
+          mobile: officer.mobile,
+          badge_number: officer.badge_number,
+          shift_schedule: officer.shift_schedule,
+        });
+        // Merge Redux updates into profileData for immediate UI update
+        setProfileData({ 
+          ...profileData, 
+          name: officer.name || profileData.name,
+          email_id: officer.email_id || profileData.email_id,
+          mobile: officer.mobile !== undefined ? officer.mobile : profileData.mobile,
+          badge_number: officer.badge_number !== undefined ? officer.badge_number : profileData.badge_number,
+          shift_schedule: officer.shift_schedule !== undefined ? officer.shift_schedule : profileData.shift_schedule,
+        });
+      }
+    } else if (officer && !profileData) {
+      // If profileData not loaded yet, use officer from Redux
+      setProfileData(officer);
+    }
+  }, [officer?.name, officer?.email_id, officer?.mobile, officer?.badge_number, officer?.shift_schedule]);
+
+  // Use profileData if available, otherwise fall back to officer from Redux
+  // This ensures we always show the latest data (from API or Redux updates)
+  const displayOfficer = profileData || officer;
+
   // Get sample stats if not available
   const getSampleStats = () => {
     return {
-      total_responses: (officer && officer.stats && officer.stats.total_responses) ? officer.stats.total_responses : 156,
-      avg_response_time: (officer && officer.stats && officer.stats.avg_response_time) ? officer.stats.avg_response_time : 3.2,
-      active_hours: (officer && officer.stats && officer.stats.active_hours) ? officer.stats.active_hours : 240,
-      area_coverage: (officer && officer.stats && officer.stats.area_coverage) ? officer.stats.area_coverage : 8.5,
-      rating: (officer && officer.stats && officer.stats.rating) ? officer.stats.rating : 4.8,
+      total_responses: (displayOfficer && displayOfficer.stats && displayOfficer.stats.total_responses) ? displayOfficer.stats.total_responses : 156,
+      avg_response_time: (displayOfficer && displayOfficer.stats && displayOfficer.stats.avg_response_time) ? displayOfficer.stats.avg_response_time : 3.2,
+      active_hours: (displayOfficer && displayOfficer.stats && displayOfficer.stats.active_hours) ? displayOfficer.stats.active_hours : 240,
+      area_coverage: (displayOfficer && displayOfficer.stats && displayOfficer.stats.area_coverage) ? displayOfficer.stats.area_coverage : 8.5,
+      rating: (displayOfficer && displayOfficer.stats && displayOfficer.stats.rating) ? displayOfficer.stats.rating : 4.8,
     };
   };
 
@@ -154,6 +331,16 @@ export const ProfileScreen = ({ navigation }: any) => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <StatusBar barStyle="light-content" backgroundColor={colors.secondary} />
+        <ActivityIndicator size="large" color={colors.white} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={colors.secondary} />
@@ -164,15 +351,15 @@ export const ProfileScreen = ({ navigation }: any) => {
         {/* Header Section */}
         <View style={styles.headerSection}>
           <View style={styles.profileImageContainer}>
-            {officer && officer.user_image ? (
+            {displayOfficer && displayOfficer.user_image ? (
               <Image
-                source={{ uri: officer.user_image }}
+                source={{ uri: displayOfficer.user_image }}
                 style={styles.profileImage}
               />
             ) : (
               <View style={[styles.profileImage, styles.profileImagePlaceholder]}>
                 <Text style={styles.profileImageText}>
-                  {officer && officer.name && typeof officer.name === 'string' ? officer.name.charAt(0).toUpperCase() : 'O'}
+                  {displayOfficer && displayOfficer.name && typeof displayOfficer.name === 'string' ? displayOfficer.name.charAt(0).toUpperCase() : 'O'}
                 </Text>
               </View>
             )}
@@ -181,11 +368,15 @@ export const ProfileScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.officerName}>{officer && officer.name ? officer.name : 'Officer'}</Text>
-          <Text style={styles.badgeNumber}>#{officer && officer.security_id ? officer.security_id : 'N/A'}</Text>
+          <Text style={styles.officerName}>{displayOfficer && displayOfficer.name ? displayOfficer.name : 'Officer'}</Text>
+          <Text style={styles.badgeNumber}>#{displayOfficer && displayOfficer.security_id ? displayOfficer.security_id : 'N/A'}</Text>
 
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>{officer && officer.security_role ? officer.security_role : 'Security Officer'}</Text>
+            <Text style={styles.roleText}>
+              {displayOfficer && displayOfficer.security_role 
+                ? displayOfficer.security_role.charAt(0).toUpperCase() + displayOfficer.security_role.slice(1)
+                : 'Security Officer'}
+            </Text>
           </View>
 
           <View style={styles.quickStats}>
@@ -256,19 +447,67 @@ export const ProfileScreen = ({ navigation }: any) => {
             <View style={styles.infoRow}>
               <Text style={styles.infoIcon}>📧</Text>
               <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{officer && officer.email_id ? officer.email_id : 'N/A'}</Text>
+              <Text style={styles.infoValue}>{displayOfficer && displayOfficer.email_id ? displayOfficer.email_id : 'N/A'}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoIcon}>📞</Text>
               <Text style={styles.infoLabel}>Phone</Text>
-              <Text style={styles.infoValue}>{officer && officer.mobile ? officer.mobile : 'N/A'}</Text>
+              <Text style={styles.infoValue}>
+                {displayOfficer && displayOfficer.mobile && displayOfficer.mobile.trim() !== '' 
+                  ? displayOfficer.mobile 
+                  : 'NA'}
+              </Text>
+            </View>
+            {displayOfficer && displayOfficer.badge_number && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoIcon}>🆔</Text>
+                <Text style={styles.infoLabel}>Badge Number</Text>
+                <Text style={styles.infoValue}>{displayOfficer.badge_number}</Text>
+              </View>
+            )}
+            {geofenceName && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoIcon}>📍</Text>
+                <Text style={styles.infoLabel}>Assigned Geofence</Text>
+                <Text style={styles.infoValue}>{geofenceName}</Text>
+              </View>
+            )}
+            {displayOfficer && displayOfficer.shift_schedule && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoIcon}>🕐</Text>
+                <Text style={styles.infoLabel}>Shift Schedule</Text>
+                <Text style={styles.infoValue}>{displayOfficer.shift_schedule}</Text>
+              </View>
+            )}
+            <View style={styles.infoRow}>
+              <Text style={styles.infoIcon}>🆔</Text>
+              <Text style={styles.infoLabel}>Security ID</Text>
+              <Text style={styles.infoValue}>#{displayOfficer && displayOfficer.security_id ? displayOfficer.security_id : 'N/A'}</Text>
             </View>
             <View style={[styles.infoRow, styles.infoRowLast]}>
-              <Text style={styles.infoIcon}>🆔</Text>
-              <Text style={styles.infoLabel}>Badge ID</Text>
-              <Text style={styles.infoValue}>#{officer && officer.security_id ? officer.security_id : 'N/A'}</Text>
+              <Text style={styles.infoIcon}>✓</Text>
+              <Text style={styles.infoLabel}>Status</Text>
+              <Text style={[
+                styles.infoValue,
+                displayOfficer && displayOfficer.status === 'active' ? styles.statusActive : styles.statusInactive
+              ]}>
+                {displayOfficer && displayOfficer.status 
+                  ? displayOfficer.status.charAt(0).toUpperCase() + displayOfficer.status.slice(1)
+                  : 'N/A'}
+              </Text>
             </View>
           </View>
+
+          {/* Update Button */}
+          <TouchableOpacity
+            style={styles.updateButton}
+            onPress={() => {
+              navigation.navigate('UpdateProfile');
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.updateButtonText}>UPDATE PROFILE</Text>
+          </TouchableOpacity>
 
           {/* Logout Button */}
           <TouchableOpacity
@@ -561,6 +800,23 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.darkText,
   },
+  updateButton: {
+    height: 48,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 12,
+    ...shadows.md,
+  },
+  updateButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.white,
+    letterSpacing: 0.5,
+  },
   logoutButton: {
     height: 48,
     backgroundColor: colors.white,
@@ -570,7 +826,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 16,
-    marginTop: 24,
+    marginTop: 0,
     marginBottom: 20,
   },
   logoutButtonText: {
@@ -578,5 +834,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.emergencyRed,
     letterSpacing: 0.5,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.white,
+    fontWeight: '500',
+  },
+  statusActive: {
+    color: colors.successGreen,
+    fontWeight: '600',
+  },
+  statusInactive: {
+    color: colors.warningOrange,
+    fontWeight: '600',
   },
 });

@@ -6,9 +6,9 @@
 export const API_ENDPOINTS = {
   // ==================== AUTHENTICATION ====================
   LOGIN: '/api/security/login/',
-  LOGOUT: '/api/security/logout/', // Not in documented list but keeping for compatibility
-  REFRESH_TOKEN: '/api/security/token/refresh/', // Not in documented list but keeping for compatibility
-  FORGOT_PASSWORD: '/api/security/password-reset/', // Not in documented list but keeping for compatibility
+  LOGOUT: '/api/security/logout/', // Optional - may not exist on backend (404 is handled gracefully)
+  REFRESH_TOKEN: '/api/security/token/refresh/', // Optional - may not exist on backend (404 is handled gracefully)
+  FORGOT_PASSWORD: '/api/security/password-reset/', // Password reset - sends email to user
 
   // ==================== PROFILE ====================
   GET_PROFILE: '/api/security/profile/',
@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
   LIST_SOS: '/api/security/sos/',
   GET_SOS: '/api/security/sos/{id}/',
   UPDATE_SOS: '/api/security/sos/{id}/', // PATCH/PUT
+  DELETE_SOS: '/api/security/sos/{id}/', // DELETE
   RESOLVE_SOS: '/api/security/sos/{id}/resolve/', // PATCH
   GET_ACTIVE_SOS: '/api/security/sos/active/',
   GET_RESOLVED_SOS: '/api/security/sos/resolved/',
@@ -64,8 +65,9 @@ export const API_ENDPOINTS = {
 
   // ==================== LEGACY/ADDITIONAL (not in documented API) ====================
   // These are kept for backward compatibility or may be used by frontend
-  UPDATE_LOCATION: '/api/security/location/', // May map to live_location
-  GET_USER_LOCATION: '/api/security/location/',
+  // NOTE: These endpoints may not exist - use live_location endpoints instead
+  UPDATE_LOCATION: '/api/security/live_location/', // Maps to live_location
+  GET_USER_LOCATION: '/api/security/live_location/', // User location might be in SOS alert data
   GET_GEOFENCE_DETAILS: '/api/security/geofence/',
   GET_USERS_IN_AREA: '/api/security/geofence/users/',
   SEND_BROADCAST: '/api/security/broadcast/',

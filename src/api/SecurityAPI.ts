@@ -7,6 +7,7 @@ const getBaseURL = () => {
   // Use BASE_URL from config.ts and append /api/security (no trailing slash)
   const baseUrl = apiConfig.BASE_URL;
   const apiUrl = `${baseUrl}/api/security`;
+  console.log(`[API Config] Using base URL from config: ${apiUrl}`);
   return apiUrl;
   
   // For local development, create .env file with:
@@ -21,7 +22,7 @@ const apiClient = axios.create({
     "Content-Type": "application/json",
     "Accept": "application/json",
   },
-  timeout: 60000, // Increased timeout for Render (free tier can be slow)
+  timeout: 90000, // 90 seconds - Render free tier can take 30-90s to wake up from sleep
   validateStatus: function (status) {
     return status < 500; // Don't throw error for 4xx status codes
   },
@@ -169,7 +170,7 @@ export const loginOfficer = async (username: string, password: string) => {
     return await performLogin(requestData);
   } catch (err) {
     // Wait 2 seconds before retry
-    await new Promise(res => setTimeout(res, 2000));
+    await new Promise(function(res) { return setTimeout(res, 2000); });
     // One retry only - no loops
     return await performLogin(requestData);
   }
@@ -181,7 +182,7 @@ const performLogin = async (requestData: { username: string; password: string })
     // Make API request - use longer timeout for Render free tier
     const endpoint = "/login/";
     const res = await apiClient.post(endpoint, requestData, {
-      timeout: 15000, // 15 second timeout - Render free tier can take 10-30s to wake up
+      timeout: 20000, // 20 seconds - Mobile + Render + TLS handshake = slow first request
     });
 
     const responseData = res.data;
@@ -203,7 +204,7 @@ const performLogin = async (requestData: { username: string; password: string })
     if (!accessToken) {
       throw new Error("Access token not received from server");
     }
-
+    
     // Save tokens in background (non-blocking) - return immediately
     setToken(accessToken).catch(() => {}); // Fire and forget
     if (refreshToken) {
@@ -299,3 +300,57 @@ export const getNavigation = () => apiClient.get("/navigation/");
 // 📜 INCIDENTS
 // --------------------------------------
 export const listIncidents = () => apiClient.get("/incidents/");
+
+// --------------------------------------
+// 🔍 CONNECTION TEST
+// --------------------------------------
+/**
+ * Test backend connection
+ * Returns true if connection is successful, false otherwise
+ */
+export const testConnection = async (): Promise<{ success: boolean; message: string; url?: string }> => {
+  try {
+    const baseURL = apiClient.defaults.baseURL;
+    const testUrl = `${baseURL}/login/`;
+    
+    console.log(`[Connection Test] Testing: ${testUrl}`);
+    
+    // Try a simple GET request (will likely return 405 Method Not Allowed, but that means server is reachable)
+    const response = await apiClient.get("/login/", {
+      timeout: 10000, // 10 second timeout for connection test
+      validateStatus: () => true, // Accept any status code
+    });
+    
+    // If we get any response (even 405), server is reachable
+    if (response.status !== undefined) {
+      return {
+        success: true,
+        message: `Server is reachable (Status: ${response.status})`,
+        url: testUrl,
+      };
+    }
+    
+    return {
+      success: false,
+      message: "Server responded but with unexpected format",
+      url: testUrl,
+    };
+  } catch (error: any) {
+    const baseURL = apiClient.defaults.baseURL;
+    const testUrl = `${baseURL}/login/`;
+    
+    if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+      return {
+        success: false,
+        message: `Cannot reach server at ${testUrl}. Check if URL is correct and server is running.`,
+        url: testUrl,
+      };
+    }
+    
+    return {
+      success: false,
+      message: error.message || "Connection test failed",
+      url: testUrl,
+    };
+  }
+};

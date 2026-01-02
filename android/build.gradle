@@ -14,6 +14,8 @@ buildscript {
         // Some native modules (e.g. older Reanimated releases) still reference
         // a top-level `minor` property; provide it for compatibility.
         minor = 73
+        // Google Play Services Location version for react-native-geolocation-service
+        playServicesLocationVersion = "21.0.1"
     }
     repositories {
         google()

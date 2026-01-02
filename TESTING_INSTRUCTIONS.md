@@ -1,120 +1,109 @@
-# Testing the Application with Security Officer Credentials
+# Testing Instructions for Security Officer App
 
-## ✅ You've Created a Security Officer!
+## APK Installation Guide
 
-Now let's test the app with your credentials.
+### For Android Devices:
 
-## Step 1: Get Your Credentials
+1. **Download the APK**
+   - Download the `app-debug.apk` file from the shared link
+   - The file size is approximately 30-50 MB
 
-From Django Admin, you created:
-- **Username**: (the username you set)
-- **Email**: (the email you set)  
-- **Password**: (the password you set)
+2. **Enable Unknown Sources**
+   - Go to **Settings** > **Security** (or **Settings** > **Apps** > **Special Access**)
+   - Enable **"Install Unknown Apps"** or **"Install from Unknown Sources"**
+   - Select your file manager (e.g., Files, Downloads, Chrome)
+   - Toggle **"Allow from this source"** to ON
 
-**Note**: The login accepts either **username** OR **email** in the same field.
+3. **Install the APK**
+   - Open the downloaded APK file
+   - Tap **"Install"**
+   - Wait for installation to complete
+   - Tap **"Open"** to launch the app
 
-## Step 2: Test Login in the App
+4. **Grant Permissions**
+   - When prompted, allow:
+     - **Location** (Required for geofence and location features)
+     - **Storage** (If needed)
+     - **Internet** (Required for API calls)
 
-1. **Open the app** on your device/emulator
+## App Requirements
 
-2. **On the Login Screen:**
-   - The field says "Badge ID or Email" but it accepts:
-     - ✅ Username (e.g., `SecurityOfficer1`)
-     - ✅ Email (if you have one)
-     - ✅ Badge ID (if you have one)
-   - Enter your **username** `SecurityOfficer1` in the "Badge ID or Email" field
-   - Enter your **password** in the "Password" field
-   - Tap **LOGIN**
+- **Android Version**: 6.0 (Marshmallow) or higher
+- **Internet Connection**: Required
+- **GPS**: Should be enabled for location features
+- **Storage**: ~50 MB free space
 
-3. **What Should Happen:**
-   - ✅ Login button shows "LOGGING IN..."
-   - ✅ If successful: Automatically navigates to **SOS Page**
-   - ✅ Token is saved and attached to all future API calls
-   - ❌ If failed: Shows error message
+## Test Credentials
 
-## Step 3: Verify Login Success
+**Note**: Use the credentials provided by your administrator.
 
-After successful login, you should:
-- ✅ See the **SOS Page** (first page after login)
-- ✅ Be able to navigate using bottom navigation bar
-- ✅ See your user data in Profile page
-- ✅ All API calls should work with authentication
+If you need test credentials, contact the development team.
 
-## Step 4: Test API Connection
+## Backend Information
 
-You can verify the backend connection:
+- **Backend URL**: `https://safetnet.onrender.com`
+- **Status**: The backend server may take 2-3 minutes to wake up if inactive (free tier)
 
-1. Go to **Settings** (⚙️ icon on home page)
-2. Scroll to **"CONNECTION"** section
-3. Tap **"Test Backend Connection"**
-4. Should show:
-   - ✅ Backend API: Connected
-   - ✅ Database: Connected
+## Features to Test
 
-## Troubleshooting
+### 1. Login
+- [ ] Login with valid credentials
+- [ ] Verify error handling for invalid credentials
+- [ ] Check if session persists after app restart
 
-### Issue: "Invalid Credentials"
-- **Check**: Username/email and password are correct
-- **Check**: User exists in Django admin
-- **Check**: User is active (not disabled)
-- **Check**: Backend server is running
+### 2. Dashboard
+- [ ] View recent alerts
+- [ ] Check alert statistics (Active, Pending, Resolved)
+- [ ] Navigate to different sections
 
-### Issue: "Service Unavailable (503)"
-- **Solution**: Backend server may be spinning up (Render.com free tier)
-- **Wait**: 2-3 minutes and try again
-- **Check**: `https://safetnet.onrender.com/api/security/login/` is accessible
+### 3. Alerts
+- [ ] View all alerts
+- [ ] Filter alerts (All, Emergency, Accepted, Pending, Completed)
+- [ ] Respond to alerts
+- [ ] Mark alerts as "SOLVED"
+- [ ] Delete alerts
+- [ ] Check alert details page
 
-### Issue: "Network Error"
-- **Check**: Your device has internet connection
-- **Check**: Backend URL is correct: `https://safetnet.onrender.com/api/security/`
+### 4. Geofence Map
+- [ ] View assigned geofence area
+- [ ] Check live location tracking
+- [ ] Verify GPS accuracy circle
+- [ ] Test geofence entry/exit notifications
+- [ ] View alert statistics on map
 
-### Issue: Login succeeds but no data shows
-- **Normal**: If you haven't created sample data yet
-- **Next Step**: Create sample data (see BACKEND_SETUP_GUIDE.md)
+### 5. Profile
+- [ ] View profile information
+- [ ] Update profile details
+- [ ] Verify changes are saved
+- [ ] Check phone number display
 
-## Quick Test with curl
+### 6. Broadcast
+- [ ] Send broadcast alerts
+- [ ] Select alert type (General Notice, Warning, Emergency)
+- [ ] Verify location is included
+- [ ] Check if alert appears in alerts list
 
-Test login from command line:
+## Known Issues / Limitations
 
-```bash
-curl -X POST "https://safetnet.onrender.com/api/security/login/" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "YOUR_USERNAME",
-    "password": "YOUR_PASSWORD"
-  }'
-```
+- GPS accuracy may vary indoors
+- Backend may take 2-3 minutes to respond if inactive
+- Some features may require backend configuration
 
-**Expected Response:**
-```json
-{
-  "token": "eyJhbGci...xyz",
-  "user": {
-    "id": 1,
-    "username": "your_username",
-    "role": "security_officer"
-  }
-}
-```
+## Reporting Issues
 
-## What to Test After Login
+When reporting issues, please include:
+1. **Device Model**: (e.g., Samsung Galaxy S21)
+2. **Android Version**: (e.g., Android 12)
+3. **Steps to Reproduce**: Detailed steps
+4. **Expected Behavior**: What should happen
+5. **Actual Behavior**: What actually happened
+6. **Screenshots**: If applicable
 
-1. ✅ **SOS Page** - Should load (may be empty if no data)
-2. ✅ **Home/Dashboard** - Should show
-3. ✅ **Profile Page** - Should show your user info
-4. ✅ **Settings** - Should work
-5. ✅ **Navigation** - Bottom tabs should work
+## Support
 
-## Next Steps
-
-After successful login:
-1. Create sample data (if needed) - See BACKEND_SETUP_GUIDE.md
-2. Test all pages
-3. Verify data loads from backend
+For questions or issues, contact the development team.
 
 ---
 
-**Ready to test!** 🚀
-
-Enter your credentials in the app and login!
-
+**App Version**: 2.2.0  
+**Build Date**: $(Get-Date -Format "yyyy-MM-dd")

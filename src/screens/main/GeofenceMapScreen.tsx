@@ -1,74 +1,424 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { WebView } from 'react-native-webview';
+import type { WebView as WebViewType } from 'react-native-webview';
+import Geolocation from 'react-native-geolocation-service';
 import { useAppSelector } from '../../redux/hooks';
 import { useLocation } from '../../hooks/useLocation';
 import { geofenceService } from '../../api/services/geofenceService';
-import { SecurityMap } from '../../components/maps/SecurityMap';
-import { GeofenceOverlay } from '../../components/maps/GeofenceOverlay';
-import { CustomMarker } from '../../components/maps/CustomMarker';
+import { profileService } from '../../api/services/profileService';
+import { useAlerts } from '../../hooks/useAlerts';
+// Removed local data fallback - using only actual backend data
 import { MapControls } from '../../components/maps/MapControls';
-import { MapLegend } from '../../components/maps/MapLegend';
 import { colors, typography, spacing } from '../../utils';
+import { isPointInPolygon } from '../../utils/helpers';
 import { GeofenceArea } from '../../types/location.types';
+import { updateOfficerProfile } from '../../redux/slices/authSlice';
+import { useAppDispatch } from '../../redux/hooks';
+import { requestLocationPermissionWithCheck } from '../../utils/permissions';
 
 export const GeofenceMapScreen = ({ navigation }: any) => {
   const officer = useAppSelector((state) => state.auth.officer);
+  const dispatch = useAppDispatch();
   const { location } = useLocation();
+  const { allAlerts } = useAlerts(); // Get actual alert data from backend
   const [geofence, setGeofence] = useState<GeofenceArea | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentLocation, setCurrentLocation] = useState<{ latitude: number; longitude: number; accuracy?: number } | null>(location);
+  const [wasInsideGeofence, setWasInsideGeofence] = useState<boolean | null>(null); // Track previous state for entry/exit detection
+  const webViewRef = useRef<WebViewType | null>(null);
+  const watchIdRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (officer && officer.geofence_id) {
-      fetchGeofence();
-    } else {
+  // Define fetchGeofence before useEffect so it's available
+  const fetchGeofence = useCallback(async () => {
+    if (!officer || !officer.geofence_id) {
+      console.warn('[GeofenceMap] No officer or geofence_id available:', { 
+        hasOfficer: !!officer, 
+        geofenceId: officer ? officer.geofence_id : undefined,
+        fullOfficer: officer
+      });
       setIsLoading(false);
+      return;
     }
-  }, [officer]);
-
-  const fetchGeofence = async () => {
-    if (!officer || !officer.geofence_id) return;
+    
     setIsLoading(true);
     try {
+      console.log('[GeofenceMap] Fetching geofence for officer:', officer.name, 'geofence_id:', officer.geofence_id, 'type:', typeof officer.geofence_id);
       const data = await geofenceService.getGeofenceDetails(officer.geofence_id);
+      console.log('[GeofenceMap] Geofence fetched successfully:', {
+        name: data.name,
+        geofence_id: data.geofence_id,
+        coordinatesCount: data.coordinates.length || 0,
+        hasCenter: !!data.center,
+        center: data.center,
+        fullData: data
+      });
+      
+      // Verify coordinates are present
+      if (!data.coordinates || data.coordinates.length === 0) {
+        console.warn('[GeofenceMap] WARNING: Geofence fetched but no coordinates found!', data);
+      }
+      
       setGeofence(data);
+      // Reset geofence entry state when geofence changes
+      setWasInsideGeofence(null);
     } catch (error: any) {
       // Handle errors gracefully
+      console.error('[GeofenceMap] Full error object:', error);
+      if (error && error.response) {
+        console.error('[GeofenceMap] Error response status:', error.response.status);
+        console.error('[GeofenceMap] Error response data:', JSON.stringify(error.response.data, null, 2));
+      }
+      
       if ((error.response && error.response.status === 404) || (error.message && error.message.includes('not found'))) {
-        // Silently handle 404 - backend endpoint not available or geofence not found
+        console.warn('[GeofenceMap] Geofence not found (404) - geofence_id:', officer.geofence_id);
+        setGeofence(null);
+      } else if (error.response && error.response.status === 400) {
+        console.error('[GeofenceMap] Bad request (400) - Invalid geofence_id:', officer.geofence_id, error.response.data);
         setGeofence(null);
       } else {
-        console.error('Error fetching geofence:', error);
+        console.error('[GeofenceMap] Error fetching geofence:', error.message || error);
+        
+        // Log error details for debugging
+        console.error('[GeofenceMap] Error fetching geofence from backend:', error.message || error);
+        console.error('[GeofenceMap] Error stack:', error.stack);
         setGeofence(null);
       }
     } finally {
       setIsLoading(false);
     }
+  }, [officer]);
+
+  // Fetch geofence when component mounts or officer changes
+  useEffect(() => {
+    const loadGeofence = async () => {
+      console.log('[GeofenceMap] Component mounted/updated');
+      
+      // Log officer data for debugging
+      console.log('[GeofenceMap] useEffect triggered - Officer data:', {
+        hasOfficer: !!officer,
+        officerName: officer ? officer.name : undefined,
+        geofence_id: officer ? officer.geofence_id : undefined,
+        geofence_idType: officer ? typeof officer.geofence_id : undefined,
+        geofence_idEmpty: !officer || !officer.geofence_id || officer.geofence_id === '',
+        geofence_idLength: officer && officer.geofence_id ? officer.geofence_id.toString().length : 0,
+        security_id: officer ? officer.security_id : undefined,
+        fullOfficer: officer ? JSON.stringify(officer, null, 2) : 'null'
+      });
+
+      if (!officer) {
+        console.warn('[GeofenceMap] No officer object available yet');
+        setIsLoading(false);
+        return;
+      }
+
+      // Check for valid geofence_id (not empty, not '0', not 0)
+      const geofenceId = officer.geofence_id;
+      const geofenceIdStr = String(geofenceId || '');
+      const isValidGeofenceId = geofenceId && 
+                                 geofenceIdStr !== '' && 
+                                 geofenceIdStr !== '0' &&
+                                 geofenceIdStr.trim() !== '';
+
+      if (!isValidGeofenceId) {
+        // Only log as info, not warning, since we'll try to fetch from profile
+        console.log('[GeofenceMap] No geofence_id in officer object, will fetch from profile', {
+          hasOfficer: !!officer,
+          hasGeofenceId: !!geofenceId,
+          geofenceIdValue: geofenceId,
+          geofenceIdType: typeof geofenceId,
+        });
+        
+        // Try to fetch profile to get geofence_id if missing
+        if (officer && officer.security_id) {
+          console.log('[GeofenceMap] Attempting to fetch profile to get geofence_id...');
+          try {
+            const profile = await profileService.getProfile(officer.security_id);
+            console.log('[GeofenceMap] Profile fetched:', JSON.stringify(profile, null, 2));
+            
+            // Extract geofence_id from profile - handle multiple formats
+            // Check for ID fields first
+            const profileAny = profile as any;
+            let profileGeofenceId = (profileAny && profileAny.geofence_id) || 
+                                   (profileAny && profileAny.assigned_geofence && profileAny.assigned_geofence.id ? profileAny.assigned_geofence.id.toString() : '') ||
+                                   (profileAny && profileAny.assigned_geofence_id ? profileAny.assigned_geofence_id.toString() : '') ||
+                                   (profileAny && profileAny.officer_id ? profileAny.officer_id.toString() : '') ||  // Sometimes officer_id is geofence_id
+                                   '';
+            
+            // If no ID found, check for geofence name and try to fetch by name
+            if (!profileGeofenceId || profileGeofenceId === '') {
+              const geofenceName = (profileAny && profileAny.officer_geofence) || 
+                                 (profileAny && profileAny.geofence_name) || 
+                                 (profileAny && profileAny.assigned_geofence && profileAny.assigned_geofence.name) ||
+                                 '';
+              
+              if (geofenceName) {
+                console.log('[GeofenceMap] Found geofence name in profile:', geofenceName);
+                
+                // Try to fetch geofence using the name directly (some APIs accept names)
+                try {
+                  console.log('[GeofenceMap] Attempting to fetch geofence by name:', geofenceName);
+                  const geofenceData = await geofenceService.getGeofenceDetails(geofenceName);
+                  console.log('[GeofenceMap] ✅ Successfully fetched geofence by name:', geofenceName);
+                  setGeofence(geofenceData);
+                  setIsLoading(false);
+                  return;
+                } catch (nameError: any) {
+                  console.log('[GeofenceMap] Fetching by name failed, will try fallback:', nameError && nameError.message ? nameError.message : nameError);
+                  // Continue to fallback logic below
+                }
+              }
+            }
+            
+            if (profileGeofenceId && profileGeofenceId !== '' && profileGeofenceId !== '0') {
+              console.log('[GeofenceMap] Found geofence_id in profile:', profileGeofenceId);
+              dispatch(updateOfficerProfile({ geofence_id: profileGeofenceId }));
+              // Retry fetching geofence with the new ID
+              setTimeout(() => {
+                fetchGeofence();
+              }, 500);
+              return;
+            } else {
+              // If no geofence_id found, check if we have a geofence name
+              const geofenceName = (profileAny && profileAny.officer_geofence) || 
+                                 (profileAny && profileAny.geofence_name) || 
+                                 (profileAny && profileAny.assigned_geofence && profileAny.assigned_geofence.name) ||
+                                 '';
+              
+              if (geofenceName) {
+                console.log('[GeofenceMap] No geofence_id found, but geofence name exists:', geofenceName);
+                console.log('[GeofenceMap] Attempting to fetch geofence using name...');
+                
+                // Try fetching geofence by name
+                try {
+                  const geofenceData = await geofenceService.getGeofenceDetails(geofenceName);
+                  console.log('[GeofenceMap] ✅ Successfully fetched geofence using name');
+                  setGeofence(geofenceData);
+                  setIsLoading(false);
+                  return;
+                } catch (error: any) {
+                  // Backend API failed - log error and show no geofence
+                  console.error('[GeofenceMap] Failed to fetch geofence from backend:', error.message || error);
+                  if (error.response) {
+                    console.error('[GeofenceMap] Backend response status:', error.response.status);
+                    console.error('[GeofenceMap] Backend response data:', error.response.data);
+                  }
+                  setGeofence(null);
+                  setIsLoading(false);
+                  return;
+                }
+              } else {
+                console.warn('[GeofenceMap] Profile fetched but geofence_id and geofence name not found');
+              }
+            }
+          } catch (error) {
+            console.error('[GeofenceMap] Error fetching profile:', error);
+          }
+        }
+        
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('[GeofenceMap] Officer has valid geofence_id:', geofenceId, 'calling fetchGeofence()');
+      fetchGeofence();
+    };
+
+    loadGeofence();
+  }, [officer, fetchGeofence, dispatch]);
+
+  // Determine map center
+  const getMapCenter = () => {
+    if (geofence && geofence.center) {
+      return {
+        lat: geofence.center.latitude,
+        lng: geofence.center.longitude,
+      };
+    } else if (currentLocation) {
+      return {
+        lat: currentLocation.latitude,
+        lng: currentLocation.longitude,
+      };
+    }
+    // Default to Mumbai
+    return { lat: 19.0760, lng: 72.8777 };
   };
 
-  // Default region (Mumbai, India) if no geofence or location
-  const defaultRegion = {
-    latitude: 19.0760,
-    longitude: 72.8777,
-    latitudeDelta: 0.05,
-    longitudeDelta: 0.05,
-  };
+  const mapCenter = getMapCenter();
+  
+  // Start live location tracking
+  useEffect(() => {
+    let mounted = true;
+    
+    const startTracking = async () => {
+      try {
+        const hasPermission = await requestLocationPermissionWithCheck(false);
+        if (!hasPermission || !mounted) return;
 
-  let mapRegion = defaultRegion;
-  if (geofence) {
-    mapRegion = {
-      latitude: geofence.center.latitude,
-      longitude: geofence.center.longitude,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05,
+        if (watchIdRef.current !== null) {
+          Geolocation.clearWatch(watchIdRef.current);
+        }
+
+        watchIdRef.current = Geolocation.watchPosition(
+          (position) => {
+            if (!mounted) return;
+            
+            if (position && position.coords) {
+              const newLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy || undefined,
+              };
+              
+              setCurrentLocation(newLocation);
+              
+              // Check if officer entered/exited geofence area
+              if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
+                const isInside = isPointInPolygon(newLocation, geofence.coordinates);
+                
+                // Check if state changed (entered or exited)
+                if (wasInsideGeofence !== null && wasInsideGeofence !== isInside) {
+                  if (isInside && !wasInsideGeofence) {
+                    // Officer entered the geofence area
+                    Alert.alert(
+                      '✅ Area Entered',
+                      `You have entered your allocated area: ${geofence.name || 'Geofence Area'}`,
+                      [{ text: 'OK', style: 'default' }],
+                      { cancelable: true }
+                    );
+                    console.log('[GeofenceMap] ✅ Officer entered geofence area:', geofence.name);
+                  } else if (!isInside && wasInsideGeofence) {
+                    // Officer exited the geofence area
+                    Alert.alert(
+                      '⚠️ Area Exited',
+                      `You have left your allocated area: ${geofence.name || 'Geofence Area'}`,
+                      [{ text: 'OK', style: 'default' }],
+                      { cancelable: true }
+                    );
+                    console.log('[GeofenceMap] ⚠️ Officer exited geofence area:', geofence.name);
+                  }
+                }
+                
+                setWasInsideGeofence(isInside);
+              } else if (wasInsideGeofence === null) {
+                // Initialize state if geofence is not loaded yet
+                setWasInsideGeofence(false);
+              }
+              
+              // Update map marker
+              if (webViewRef.current) {
+                const script = `
+                  if (window.map && typeof window.map.fitBounds === 'function' && window.updateUserLocation) {
+                    window.updateUserLocation(${newLocation.latitude}, ${newLocation.longitude}, ${newLocation.accuracy || 50});
+                  }
+                `;
+                webViewRef.current.injectJavaScript(script);
+              }
+            }
+          },
+          (error) => {
+            console.warn('[GeofenceMap] Location tracking error:', error);
+          },
+          {
+            enableHighAccuracy: false,
+            distanceFilter: 10, // Update every 10 meters
+            interval: 5000, // Update every 5 seconds
+            showLocationDialog: true,
+          }
+        );
+      } catch (error) {
+        console.error('[GeofenceMap] Error starting location tracking:', error);
+      }
     };
-  } else if (location) {
-    mapRegion = {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      latitudeDelta: 0.05,
-      longitudeDelta: 0.05,
+
+    startTracking();
+
+    return () => {
+      mounted = false;
+      if (watchIdRef.current !== null) {
+        Geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
     };
-  }
+  }, []);
+
+  // Update map when location or geofence changes
+  useEffect(() => {
+    if (webViewRef.current && geofence && geofence.coordinates && geofence.coordinates.length > 0) {
+      console.log('[GeofenceMap] Updating map with geofence data:', {
+        name: geofence.name,
+        coordinatesCount: geofence.coordinates.length,
+        center: geofence.center
+      });
+      
+      const geofencePolygon = JSON.stringify(
+        geofence.coordinates.map(c => [c.latitude, c.longitude])
+      );
+      const center = getMapCenter();
+      
+      const script = `
+        if (window.map && typeof window.map.fitBounds === 'function' && typeof L !== 'undefined' && L.map && typeof map !== 'undefined') {
+          // Remove existing geofence polygon if any
+          if (window.geofencePolygonLayer) {
+            map.removeLayer(window.geofencePolygonLayer);
+          }
+          
+          const geofenceCoords = ${geofencePolygon};
+          if (geofenceCoords && geofenceCoords.length > 0) {
+            window.geofencePolygonLayer = L.polygon(geofenceCoords, {
+              color: '#2563eb',
+              fillColor: '#2563eb',
+              fillOpacity: 0.2,
+              weight: 2
+            }).addTo(map);
+            
+            // Expand bounds by 200 meters to show surrounding area
+            const bounds = window.geofencePolygonLayer.getBounds();
+            const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+            const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+            
+            // 200m in degrees: approximately 0.0018 degrees latitude
+            // For longitude, it varies by latitude: 0.0018 / cos(latitude)
+            const latOffset = 0.0018; // ~200m
+            const lngOffset = 0.0018 / Math.cos(centerLat * Math.PI / 180); // ~200m adjusted for latitude
+            
+            // Expand bounds by 1km in all directions
+            const expandedBounds = L.latLngBounds(
+              [bounds.getSouth() - latOffset, bounds.getWest() - lngOffset],
+              [bounds.getNorth() + latOffset, bounds.getEast() + lngOffset]
+            );
+            
+            // Fit map to expanded bounds
+            map.fitBounds(expandedBounds, {
+              padding: [20, 20], // Small padding for UI elements
+              maxZoom: 15 // Maximum zoom level
+            });
+            
+            // Ensure minimum zoom level for better context
+            if (map.getZoom() > 15) {
+              map.setZoom(15);
+            }
+            console.log('Geofence polygon added and map fitted to bounds');
+          }
+        }
+      `;
+      
+      // Wait a bit for map to be ready
+      setTimeout(() => {
+        if (webViewRef.current) {
+          webViewRef.current.injectJavaScript(script);
+        }
+      }, 300);
+    } else if (webViewRef.current && currentLocation) {
+      const center = getMapCenter();
+      const script = `
+        if (window.map && typeof window.map.fitBounds === 'function' && window.updateMapCenter && typeof map !== 'undefined') {
+          window.updateMapCenter(${center.lat}, ${center.lng});
+        }
+      `;
+      webViewRef.current.injectJavaScript(script);
+    }
+  }, [currentLocation, geofence]);
 
   return (
     <View style={styles.container}>
@@ -82,51 +432,181 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
             {isLoading ? 'Loading...' : (geofence && geofence.name ? geofence.name : 'No area assigned')}
           </Text>
         </View>
-        <TouchableOpacity>
-          <Text style={styles.menuIcon}>⋮</Text>
+        <TouchableOpacity 
+          onPress={async () => {
+            // Manual refresh button
+            console.log('[GeofenceMap] Manual refresh triggered');
+            
+            if (!officer) {
+              console.warn('[GeofenceMap] Cannot refresh - no officer object');
+              return;
+            }
+            
+            // If no geofence_id, try to fetch from profile first
+            if (!officer.geofence_id || officer.geofence_id === '' || officer.geofence_id === '0') {
+              console.log('[GeofenceMap] No geofence_id, fetching profile...');
+              try {
+                const profile = await profileService.getProfile(officer.security_id);
+                
+                // Extract geofence_id from profile - handle multiple formats
+                const profileAnyRefresh = profile as any;
+                let profileGeofenceId = (profileAnyRefresh && profileAnyRefresh.geofence_id) || 
+                                       (profileAnyRefresh && profileAnyRefresh.assigned_geofence && profileAnyRefresh.assigned_geofence.id ? profileAnyRefresh.assigned_geofence.id.toString() : '') ||
+                                       (profileAnyRefresh && profileAnyRefresh.assigned_geofence_id ? profileAnyRefresh.assigned_geofence_id.toString() : '') ||
+                                       (profileAnyRefresh && profileAnyRefresh.officer_id ? profileAnyRefresh.officer_id.toString() : '') ||
+                                       '';
+                
+                // If no ID found, check for geofence name and try to fetch by name
+                if (!profileGeofenceId || profileGeofenceId === '') {
+                  const geofenceName = (profileAnyRefresh && profileAnyRefresh.officer_geofence) || 
+                                     (profileAnyRefresh && profileAnyRefresh.geofence_name) || 
+                                     (profileAnyRefresh && profileAnyRefresh.assigned_geofence && profileAnyRefresh.assigned_geofence.name) ||
+                                     '';
+                  
+              if (geofenceName) {
+                console.log('[GeofenceMap] Found geofence name in profile:', geofenceName);
+                console.log('[GeofenceMap] Attempting to fetch geofence using name...');
+                
+                // Try fetching geofence by name directly
+                try {
+                  const geofenceData = await geofenceService.getGeofenceDetails(geofenceName);
+                  console.log('[GeofenceMap] ✅ Successfully fetched geofence by name');
+                  setGeofence(geofenceData);
+                  setIsLoading(false);
+                  return;
+                } catch (nameError: any) {
+                  // Backend API failed - log error
+                  console.error('[GeofenceMap] Failed to fetch geofence by name from backend:', nameError.message || nameError);
+                  if (nameError.response) {
+                    console.error('[GeofenceMap] Backend response status:', nameError.response.status);
+                    console.error('[GeofenceMap] Backend response data:', nameError.response.data);
+                  }
+                  setGeofence(null);
+                  setIsLoading(false);
+                  return;
+                }
+              }
+                }
+                
+                if (profileGeofenceId && profileGeofenceId !== '' && profileGeofenceId !== '0') {
+                  console.log('[GeofenceMap] Found geofence_id in profile:', profileGeofenceId);
+                  dispatch(updateOfficerProfile({ geofence_id: profileGeofenceId }));
+                  // Wait a moment for Redux to update, then fetch geofence
+                  setTimeout(() => {
+                    fetchGeofence();
+                  }, 300);
+                  return;
+                }
+              } catch (error) {
+                console.error('[GeofenceMap] Error fetching profile:', error);
+              }
+            }
+            
+            // If we have geofence_id, fetch geofence directly
+            if (officer.geofence_id) {
+              fetchGeofence();
+            } else {
+              console.warn('[GeofenceMap] Cannot refresh - geofence_id not found in profile either');
+            }
+          }}
+        >
+          <Text style={styles.menuIcon}>↻</Text>
         </TouchableOpacity>
       </View>
 
-      <SecurityMap
+      {/* Leaflet Map */}
+      <WebView
+        ref={webViewRef}
+        key={`map-${geofence && geofence.geofence_id ? geofence.geofence_id : 'no-geofence'}-${isLoading ? 'loading' : 'loaded'}`}
+        source={{ html: getLeafletMapHTML(mapCenter, geofence, currentLocation) }}
         style={styles.map}
-        initialRegion={mapRegion}
-      >
-        {geofence && <GeofenceOverlay geofence={geofence} />}
-        {location && (
-          <CustomMarker
-            coordinate={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-            }}
-            type="officer"
-            label="You"
-          />
-        )}
-      </SecurityMap>
-
-      <MapControls
-        onZoomIn={() => {}}
-        onZoomOut={() => {}}
-        onRecenter={() => {}}
-        onLayerToggle={() => {}}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        startInLoadingState={true}
+        scalesPageToFit={true}
+        onLoadEnd={() => {
+          // Inject geofence polygon after map loads if geofence data arrives later
+          if (geofence && geofence.coordinates && geofence.coordinates.length > 0 && webViewRef.current) {
+            const geofencePolygon = JSON.stringify(
+              geofence.coordinates.map(c => [c.latitude, c.longitude])
+            );
+            const script = `
+              if (window.map && typeof window.map.fitBounds === 'function' && typeof L !== 'undefined' && L.map && typeof map !== 'undefined') {
+                const geofenceCoords = ${geofencePolygon};
+                if (geofenceCoords && geofenceCoords.length > 0) {
+                  const polygon = L.polygon(geofenceCoords, {
+                    color: '#2563eb',
+                    fillColor: '#2563eb',
+                    fillOpacity: 0.2,
+                    weight: 2
+                  }).addTo(map);
+                  // Expand bounds by 200 meters to show surrounding area
+                  const bounds = polygon.getBounds();
+                  const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+                  const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+                  
+                  // 200m in degrees: approximately 0.0018 degrees latitude
+                  // For longitude, it varies by latitude: 0.0018 / cos(latitude)
+                  const latOffset = 0.0018; // ~200m
+                  const lngOffset = 0.0018 / Math.cos(centerLat * Math.PI / 180); // ~200m adjusted for latitude
+                  
+                  // Expand bounds by 1km in all directions
+                  const expandedBounds = L.latLngBounds(
+                    [bounds.getSouth() - latOffset, bounds.getWest() - lngOffset],
+                    [bounds.getNorth() + latOffset, bounds.getEast() + lngOffset]
+                  );
+                  
+                  // Fit map to expanded bounds
+                  map.fitBounds(expandedBounds, {
+                    padding: [20, 20], // Small padding for UI elements
+                    maxZoom: 15 // Maximum zoom level
+                  });
+                  
+                  // Ensure minimum zoom level for better context
+                  if (map.getZoom() > 15) {
+                    map.setZoom(15);
+                  }
+                  console.log('Geofence polygon added:', geofenceCoords);
+                }
+              }
+            `;
+            setTimeout(() => {
+              if (webViewRef.current) {
+                webViewRef.current.injectJavaScript(script);
+              }
+            }, 500);
+          }
+        }}
       />
 
-      <MapLegend
-        items={[
-          { icon: '🛡️', label: 'Your Location' },
-          { icon: '👤', label: 'Active User' },
-        ]}
+      <MapControls
+        showZoomControls={false}
+        onRecenter={() => {
+          if (webViewRef.current && mapCenter) {
+            webViewRef.current.injectJavaScript(`
+              if (window.map && typeof window.map.fitBounds === 'function' && window.recenter) {
+                window.recenter(${mapCenter.lat}, ${mapCenter.lng});
+              }
+            `);
+          }
+        }}
       />
 
       <View style={styles.infoCard}>
         <Text style={styles.infoHeader}>YOUR ASSIGNED AREA</Text>
-        {geofence ? (
+        {isLoading ? (
+          <View style={styles.infoRow}>
+            <View style={styles.infoLeft}>
+              <Text style={styles.areaName}>Loading area details...</Text>
+            </View>
+          </View>
+        ) : geofence ? (
           <>
             <View style={styles.infoRow}>
               <View style={styles.infoLeft}>
                 <Text style={styles.areaName}>{geofence.name}</Text>
                 <View style={styles.zoneBadge}>
-                  <Text style={styles.zoneText}>Zone {geofence.geofence_id.slice(-1)}</Text>
+                  <Text style={styles.zoneText}>Zone {String(geofence.geofence_id).slice(-1)}</Text>
                 </View>
                 <Text style={styles.coverage}>
                   {(geofence.area_size && typeof geofence.area_size === 'number') ? geofence.area_size.toFixed(1) : '0'} km² • {geofence.radius ? (geofence.radius / 1000).toFixed(1) : '1.5'} km radius
@@ -156,13 +636,13 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
           <>
             <View style={styles.statsRow}>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🔴 3 Emergency</Text>
+                <Text style={styles.statText}>🔴 {allAlerts.filter((a) => a.priority === 'high').length} Emergency</Text>
               </View>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟡 5 Pending</Text>
+                <Text style={styles.statText}>🟡 {allAlerts.filter((a) => a.status === 'pending').length} Pending</Text>
               </View>
               <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟢 45 Completed</Text>
+                <Text style={styles.statText}>🟢 {allAlerts.filter((a) => a.status === 'completed').length} Completed</Text>
               </View>
             </View>
             <TouchableOpacity style={styles.viewButton}>
@@ -179,6 +659,222 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       </View>
     </View>
   );
+};
+
+// Generate Leaflet map HTML
+const getLeafletMapHTML = (
+  center: { lat: number; lng: number },
+  geofence: GeofenceArea | null,
+  location: { latitude: number; longitude: number; accuracy?: number } | null
+) => {
+  // Log what we're generating
+    // Log what we're generating
+    console.log('[GeofenceMap] Generating map HTML:', {
+      center,
+      hasGeofence: !!geofence,
+      geofenceName: geofence ? geofence.name : undefined,
+      coordinatesCount: geofence && geofence.coordinates ? geofence.coordinates.length : 0,
+      hasLocation: !!location
+    });
+  
+  // Handle coordinates - check if they're already in [lat, lng] format or {latitude, longitude} format
+  let geofencePolygon = '[]';
+  if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
+    try {
+      // Check if coordinates are in array format [lat, lng] or object format {latitude, longitude}
+      const firstCoord = geofence.coordinates[0];
+      if (Array.isArray(firstCoord)) {
+        // Already in [lat, lng] format
+        geofencePolygon = JSON.stringify(geofence.coordinates);
+      } else if (firstCoord && typeof firstCoord === 'object' && 'latitude' in firstCoord) {
+        // In {latitude, longitude} format - convert to [lat, lng]
+        geofencePolygon = JSON.stringify(
+          geofence.coordinates.map((c: any) => [c.latitude, c.longitude])
+        );
+      }
+      console.log('[GeofenceMap] Geofence polygon coordinates:', geofencePolygon);
+    } catch (error) {
+      console.error('[GeofenceMap] Error processing coordinates:', error);
+    }
+  }
+  
+  const userLocation = location 
+    ? `[${location.latitude}, ${location.longitude}]`
+    : 'null';
+  const userAccuracy = location ? (location.accuracy || 50) : 50; // Default to 50 meters if not available
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    body { margin: 0; padding: 0; }
+    #map { width: 100%; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const center = [${center.lat}, ${center.lng}];
+    const geofenceCoords = ${geofencePolygon};
+    const userLoc = ${userLocation};
+    const userAccuracy = ${userAccuracy}; // GPS accuracy in meters
+    
+    // Initialize map with a reasonable zoom level
+    // Zoom level 13 shows good detail without being too close
+    const map = L.map('map').setView(center, 13);
+    
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(map);
+    
+    // Add geofence polygon if exists
+    if (geofenceCoords && geofenceCoords.length > 0) {
+      const geofencePolygon = L.polygon(geofenceCoords, {
+        color: '#2563eb',
+        fillColor: '#2563eb',
+        fillOpacity: 0.2,
+        weight: 2
+      }).addTo(map);
+      
+      // Expand bounds by 200 meters (approximately 0.0018 degrees) to show surrounding area
+      const bounds = geofencePolygon.getBounds();
+      const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+      const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+      
+      // 200m in degrees: approximately 0.0018 degrees latitude
+      // For longitude, it varies by latitude: 0.0018 / cos(latitude)
+      const latOffset = 0.0018; // ~200m
+      const lngOffset = 0.0018 / Math.cos(centerLat * Math.PI / 180); // ~200m adjusted for latitude
+      
+      // Expand bounds by 1km in all directions
+      const expandedBounds = L.latLngBounds(
+        [bounds.getSouth() - latOffset, bounds.getWest() - lngOffset],
+        [bounds.getNorth() + latOffset, bounds.getEast() + lngOffset]
+      );
+      
+      // Fit map to expanded bounds
+      map.fitBounds(expandedBounds, {
+        padding: [20, 20], // Small padding for UI elements
+        maxZoom: 15 // Maximum zoom level
+      });
+      
+      // Ensure minimum zoom level for better context
+      if (map.getZoom() > 15) {
+        map.setZoom(15);
+      }
+    }
+    
+    // Add user location marker and accuracy circle if available
+    let userMarker = null;
+    let accuracyCircle = null;
+    if (userLoc) {
+      // Add accuracy circle first (so marker appears on top)
+      accuracyCircle = L.circle(userLoc, {
+        radius: userAccuracy,
+        color: '#3B82F6',
+        fillColor: '#3B82F6',
+        fillOpacity: 0.1,
+        weight: 2,
+        dashArray: '5, 5'
+      }).addTo(map);
+      accuracyCircle.bindPopup('GPS Accuracy: ±' + Math.round(userAccuracy) + ' meters');
+      
+      // Add user location marker
+      userMarker = L.marker(userLoc, {
+        icon: L.divIcon({
+          className: 'user-marker',
+          html: '<div style="font-size: 30px;">📍</div>',
+          iconSize: [30, 30],
+          iconAnchor: [15, 30]
+        })
+      }).addTo(map);
+      userMarker.bindPopup('Your Location (Accuracy: ±' + Math.round(userAccuracy) + 'm)');
+    }
+    
+    // Map control functions
+    window.zoomIn = function() {
+      map.zoomIn();
+    };
+    
+    window.zoomOut = function() {
+      map.zoomOut();
+    };
+    
+    window.recenter = function(lat, lng) {
+      map.setView([lat, lng], map.getZoom());
+    };
+    
+    window.updateMapCenter = function(lat, lng) {
+      map.setView([lat, lng], map.getZoom());
+    };
+    
+    // Update user location marker and accuracy circle
+    window.updateUserLocation = function(lat, lng, accuracy) {
+      const newLocation = [lat, lng];
+      const accuracyRadius = accuracy || 50; // Default to 50m if not provided
+      
+      if (userMarker) {
+        userMarker.setLatLng(newLocation);
+        userMarker.setPopupContent('Your Location (Accuracy: ±' + Math.round(accuracyRadius) + 'm)');
+      } else {
+        // Create accuracy circle if it doesn't exist
+        if (!accuracyCircle) {
+          accuracyCircle = L.circle(newLocation, {
+            radius: accuracyRadius,
+            color: '#3B82F6',
+            fillColor: '#3B82F6',
+            fillOpacity: 0.1,
+            weight: 2,
+            dashArray: '5, 5'
+          }).addTo(map);
+        } else {
+          accuracyCircle.setLatLng(newLocation);
+          accuracyCircle.setRadius(accuracyRadius);
+        }
+        accuracyCircle.setPopupContent('GPS Accuracy: ±' + Math.round(accuracyRadius) + ' meters');
+        
+        // Create marker if it doesn't exist
+        userMarker = L.marker(newLocation, {
+          icon: L.divIcon({
+            className: 'user-marker',
+            html: '<div style="font-size: 30px;">📍</div>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 30]
+          })
+        }).addTo(map);
+        userMarker.bindPopup('Your Location (Live - Accuracy: ±' + Math.round(accuracyRadius) + 'm)');
+      }
+      
+      // Update accuracy circle
+      if (accuracyCircle) {
+        accuracyCircle.setLatLng(newLocation);
+        accuracyCircle.setRadius(accuracyRadius);
+      } else {
+        // Create accuracy circle if it doesn't exist
+        accuracyCircle = L.circle(newLocation, {
+          radius: accuracyRadius,
+          color: '#3B82F6',
+          fillColor: '#3B82F6',
+          fillOpacity: 0.1,
+          weight: 2,
+          dashArray: '5, 5'
+        }).addTo(map);
+        accuracyCircle.bindPopup('GPS Accuracy: ±' + Math.round(accuracyRadius) + ' meters');
+      }
+      
+      // Optionally pan to location (commented out to avoid jarring movement)
+      // map.panTo(newLocation, { animate: true, duration: 1 });
+    };
+  </script>
+</body>
+</html>
+  `;
 };
 
 const styles = StyleSheet.create({

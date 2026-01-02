@@ -14,16 +14,17 @@ export type AuthStackParamList = {
 export type MainStackParamList = {
   Dashboard: undefined;
   AlertResponse: { alert: any };
-  Logs: undefined;
+  Alerts: { filter?: string } | undefined;
   GeofenceArea: undefined;
   Broadcast: undefined;
   Profile: undefined;
+  LeafletMap: { enableSelection?: boolean; onAreaSelected?: (area: any) => void } | undefined;
 };
 
 export type DrawerParamList = {
   Home: undefined;
   Profile: undefined;
-  Logs: undefined;
+  Alerts: { filter?: string } | undefined;
   GeofenceArea: undefined;
   Broadcast: undefined;
 };

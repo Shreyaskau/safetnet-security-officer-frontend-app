@@ -3,10 +3,11 @@ import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { colors, spacing } from '../../utils';
 
 interface MapControlsProps {
-  onZoomIn: () => void;
-  onZoomOut: () => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
   onRecenter: () => void;
   onLayerToggle?: () => void;
+  showZoomControls?: boolean; // New prop to control zoom button visibility
 }
 
 export const MapControls: React.FC<MapControlsProps> = ({
@@ -14,6 +15,7 @@ export const MapControls: React.FC<MapControlsProps> = ({
   onZoomOut,
   onRecenter,
   onLayerToggle,
+  showZoomControls = false, // Default to false to hide zoom buttons
 }) => {
   return (
     <View style={styles.container}>
@@ -22,14 +24,18 @@ export const MapControls: React.FC<MapControlsProps> = ({
           <Text style={styles.icon}>◊</Text>
         </TouchableOpacity>
       )}
-      <TouchableOpacity style={styles.controlButton} onPress={onZoomIn}>
-        <Text style={styles.icon}>+</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.controlButton} onPress={onZoomOut}>
-        <Text style={styles.icon}>−</Text>
-      </TouchableOpacity>
+      {showZoomControls && onZoomIn && (
+        <TouchableOpacity style={styles.controlButton} onPress={onZoomIn}>
+          <Text style={styles.icon}>+</Text>
+        </TouchableOpacity>
+      )}
+      {showZoomControls && onZoomOut && (
+        <TouchableOpacity style={styles.controlButton} onPress={onZoomOut}>
+          <Text style={styles.icon}>−</Text>
+        </TouchableOpacity>
+      )}
       <TouchableOpacity style={styles.controlButton} onPress={onRecenter}>
-        <Text style={styles.icon}>⌖</Text>
+        <Text style={styles.icon}>📍</Text>
       </TouchableOpacity>
     </View>
   );
@@ -38,26 +44,30 @@ export const MapControls: React.FC<MapControlsProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    right: spacing.base,
-    top: spacing.xl,
+    right: spacing.base, // Align with Leaflet's zoom controls (typically 16px from right)
+    bottom: 220, // Position above info card (info card is ~200px tall, so 220px keeps button visible)
     gap: spacing.sm,
+    zIndex: 1000, // Ensure it's above other elements including WebView
+    elevation: 10, // Android elevation
   },
   controlButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: colors.primary,
   },
   icon: {
-    fontSize: 20,
-    color: colors.darkText,
+    fontSize: 24,
+    color: colors.primary,
     fontWeight: '600',
   },
 });
