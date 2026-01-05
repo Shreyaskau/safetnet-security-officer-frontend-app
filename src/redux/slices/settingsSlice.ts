@@ -1,17 +1,19 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 interface SettingsState {
   notificationsEnabled: boolean;
   locationTrackingEnabled: boolean;
   onDuty: boolean;
-  theme: 'light' | 'dark';
+  theme: ThemeMode;
 }
 
 const initialState: SettingsState = {
   notificationsEnabled: true,
   locationTrackingEnabled: true,
   onDuty: true,
-  theme: 'light',
+  theme: 'system',
 };
 
 const settingsSlice = createSlice({
@@ -27,7 +29,7 @@ const settingsSlice = createSlice({
     setOnDuty: (state, action: PayloadAction<boolean>) => {
       state.onDuty = action.payload;
     },
-    setTheme: (state, action: PayloadAction<'light' | 'dark'>) => {
+    setTheme: (state, action: PayloadAction<ThemeMode>) => {
       state.theme = action.payload;
     },
   },

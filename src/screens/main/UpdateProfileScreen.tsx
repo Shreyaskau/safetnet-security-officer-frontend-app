@@ -53,37 +53,58 @@ export const UpdateProfileScreen = ({ navigation, route }: any) => {
         setEmail(profile.email_id || profile.email || profile.officer_email || officer.email_id || '');
         
         // Extract phone number from all possible backend fields (same as ProfileScreen)
+        // ES5-compatible: no optional chaining
+        const userObj = profile.user;
+        const securityOfficerObj = profile.security_officer;
+        const officerObj = profile.officer;
+        
+        // Helper function to check if a string is a phone number (not an email)
+        const isValidPhoneNumber = (value: any): boolean => {
+          if (!value || typeof value !== 'string') return false;
+          const trimmed = value.trim();
+          // Check if it's an email (contains @)
+          if (trimmed.includes('@')) return false;
+          // Check if it contains at least one digit
+          if (!/\d/.test(trimmed)) return false;
+          // Basic phone number validation (at least 6 digits, may contain +, -, spaces, parentheses)
+          return /^[\d\s\+\-\(\)]{6,}$/.test(trimmed);
+        };
+        
         const phoneNumber = 
-          // Direct profile fields
-          profile.mobile ||
-          profile.phone ||
-          profile.officer_phone ||
-          profile.phone_number ||
-          profile.contact_number ||
-          profile.contact_phone ||
-          profile.phone_no ||
-          profile.contact ||
+          // Direct profile fields (validate they're actually phone numbers, not emails)
+          (profile.mobile && isValidPhoneNumber(profile.mobile) && profile.mobile) ||
+          (profile.phone && isValidPhoneNumber(profile.phone) && profile.phone) ||
+          (profile.officer_phone && isValidPhoneNumber(profile.officer_phone) && profile.officer_phone) ||
+          (profile.phone_number && isValidPhoneNumber(profile.phone_number) && profile.phone_number) ||
+          (profile.contact_number && isValidPhoneNumber(profile.contact_number) && profile.contact_number) ||
+          (profile.contact_phone && isValidPhoneNumber(profile.contact_phone) && profile.contact_phone) ||
+          (profile.phone_no && isValidPhoneNumber(profile.phone_no) && profile.phone_no) ||
+          (profile.contact && isValidPhoneNumber(profile.contact) && profile.contact) ||
           // Nested user object fields
-          profile.user?.mobile ||
-          profile.user?.phone ||
-          profile.user?.phone_number ||
-          profile.user?.contact_number ||
+          (userObj && userObj.mobile && isValidPhoneNumber(userObj.mobile) && userObj.mobile) ||
+          (userObj && userObj.phone && isValidPhoneNumber(userObj.phone) && userObj.phone) ||
+          (userObj && userObj.phone_number && isValidPhoneNumber(userObj.phone_number) && userObj.phone_number) ||
+          (userObj && userObj.contact_number && isValidPhoneNumber(userObj.contact_number) && userObj.contact_number) ||
           // SecurityOfficer model fields
-          profile.security_officer?.mobile ||
-          profile.security_officer?.phone ||
+          (securityOfficerObj && securityOfficerObj.mobile && isValidPhoneNumber(securityOfficerObj.mobile) && securityOfficerObj.mobile) ||
+          (securityOfficerObj && securityOfficerObj.phone && isValidPhoneNumber(securityOfficerObj.phone) && securityOfficerObj.phone) ||
           // Officer profile fields
-          profile.officer?.mobile ||
-          profile.officer?.phone ||
-          // Fallback to Redux officer data
-          officer.mobile ||
+          (officerObj && officerObj.mobile && isValidPhoneNumber(officerObj.mobile) && officerObj.mobile) ||
+          (officerObj && officerObj.phone && isValidPhoneNumber(officerObj.phone) && officerObj.phone) ||
+          // Fallback to Redux officer data (only if it's a valid phone number)
+          (officer.mobile && isValidPhoneNumber(officer.mobile) && officer.mobile) ||
           '';
         
         console.log('[UpdateProfileScreen] Phone number extraction:', {
           'profile.mobile': profile.mobile,
-          'profile.user?.mobile': profile.user?.mobile,
-          'profile.security_officer?.mobile': profile.security_officer?.mobile,
+          'profile.phone': profile.phone,
+          'profile.officer_phone': profile.officer_phone,
+          'profile.officer_phone_is_email': profile.officer_phone && profile.officer_phone.includes('@'),
+          'profile.user.mobile': userObj && userObj.mobile ? userObj.mobile : undefined,
+          'profile.security_officer.mobile': securityOfficerObj && securityOfficerObj.mobile ? securityOfficerObj.mobile : undefined,
           'officer.mobile': officer.mobile,
           'extracted_phone': phoneNumber,
+          'NOTE': 'officer_phone contains email, not phone number. User table data not included in profile response.',
         });
         
         setMobile(phoneNumber);
@@ -157,13 +178,17 @@ export const UpdateProfileScreen = ({ navigation, route }: any) => {
       });
 
       // Prepare update payload
+      // Try multiple field names for phone number to ensure backend compatibility
       const updateData: any = {
         name: name.trim(),
         email_id: email.trim(),
       };
 
+      // Send phone number with multiple possible field names for backend compatibility
       if (mobile.trim()) {
         updateData.mobile = mobile.trim();
+        updateData.phone = mobile.trim(); // Also try 'phone' field name
+        updateData.phone_number = mobile.trim(); // Also try 'phone_number' field name
       }
       if (badgeNumber.trim()) {
         updateData.badge_number = badgeNumber.trim();
@@ -175,15 +200,50 @@ export const UpdateProfileScreen = ({ navigation, route }: any) => {
       // Call update API
       const response = await profileService.updateProfile(officer.security_id, updateData);
       
-      console.log('[UpdateProfileScreen] Profile update response:', response);
+      console.log('[UpdateProfileScreen] Profile update response (full):', JSON.stringify(response, null, 2));
 
-      // Update Redux store with the new profile data
+      // Extract updated phone number from response (backend might return it in different field)
+      // profileService.updateProfile returns response.data directly, so response is already the data
+      const responseData = response;
+      
+      // ES5-compatible: no optional chaining
+      const responseUser = responseData.user;
+      
+      const updatedPhone = 
+        (responseData.mobile && responseData.mobile) ||
+        (responseData.phone && responseData.phone) ||
+        (responseData.phone_number && responseData.phone_number) ||
+        (responseUser && responseUser.mobile && responseUser.mobile) ||
+        (responseUser && responseUser.phone && responseUser.phone) ||
+        mobile.trim() || ''; // Fallback to what we sent
+
+      console.log('[UpdateProfileScreen] Extracted updated phone from response:', {
+        'responseData.mobile': responseData.mobile,
+        'responseData.phone': responseData.phone,
+        'responseData.phone_number': responseData.phone_number,
+        'responseUser.mobile': responseUser && responseUser.mobile ? responseUser.mobile : undefined,
+        'responseUser.phone': responseUser && responseUser.phone ? responseUser.phone : undefined,
+        'mobile.trim()': mobile.trim(),
+        'final updatedPhone': updatedPhone,
+      });
+
+      // Update Redux store with the new profile data (use response data if available, otherwise use form data)
+      const updatedMobile = updatedPhone && updatedPhone.trim() !== '' ? updatedPhone : mobile.trim() || '';
+      
+      console.log('[UpdateProfileScreen] Updating Redux with:', {
+        name: (responseData.name && responseData.name) || name.trim(),
+        email_id: (responseData.email_id && responseData.email_id) || (responseData.email && responseData.email) || email.trim(),
+        mobile: updatedMobile,
+        badge_number: (responseData.badge_number && responseData.badge_number) || badgeNumber.trim() || '',
+        shift_schedule: (responseData.shift_schedule && responseData.shift_schedule) || shiftSchedule.trim() || '',
+      });
+      
       dispatch(updateOfficerProfile({
-        name: name.trim(),
-        email_id: email.trim(),
-        mobile: mobile.trim() || '',
-        badge_number: badgeNumber.trim() || '',
-        shift_schedule: shiftSchedule.trim() || '',
+        name: (responseData.name && responseData.name) || name.trim(),
+        email_id: (responseData.email_id && responseData.email_id) || (responseData.email && responseData.email) || email.trim(),
+        mobile: updatedMobile,
+        badge_number: (responseData.badge_number && responseData.badge_number) || badgeNumber.trim() || '',
+        shift_schedule: (responseData.shift_schedule && responseData.shift_schedule) || shiftSchedule.trim() || '',
       }));
 
       Toast.show({
@@ -192,9 +252,14 @@ export const UpdateProfileScreen = ({ navigation, route }: any) => {
         text2: 'Profile updated successfully',
       });
 
+      // Force a profile refresh by navigating back and triggering ProfileScreen's useFocusEffect
+      // The ProfileScreen will automatically refresh when it comes into focus
       // Navigate back after a short delay to allow toast to show
       setTimeout(() => {
         navigation.goBack();
+        // Also trigger a refresh by calling the profile fetch again
+        // This ensures the phone number is fetched from the backend
+        console.log('[UpdateProfileScreen] Navigating back, ProfileScreen should refresh automatically');
       }, 1000);
     } catch (error: any) {
       console.error('[UpdateProfileScreen] Error updating profile:', error);

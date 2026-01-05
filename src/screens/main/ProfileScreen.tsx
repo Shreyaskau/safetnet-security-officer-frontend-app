@@ -61,35 +61,48 @@ export const ProfileScreen = ({ navigation }: any) => {
       const securityOfficerObj = profile.security_officer;
       const officerObj = profile.officer;
       
+      // Helper function to check if a string is a phone number (not an email)
+      const isValidPhoneNumber = (value: any): boolean => {
+        if (!value || typeof value !== 'string') return false;
+        const trimmed = value.trim();
+        // Check if it's an email (contains @)
+        if (trimmed.includes('@')) return false;
+        // Check if it contains at least one digit
+        if (!/\d/.test(trimmed)) return false;
+        // Basic phone number validation (at least 6 digits, may contain +, -, spaces, parentheses)
+        return /^[\d\s\+\-\(\)]{6,}$/.test(trimmed);
+      };
+      
       const phoneNumber = 
-        // Direct profile fields
-        (profile.mobile && profile.mobile) || 
-        (profile.phone && profile.phone) || 
-        (profile.officer_phone && profile.officer_phone) || 
-        (profile.phone_number && profile.phone_number) ||
-        (profile.contact_number && profile.contact_number) ||
-        (profile.contact_phone && profile.contact_phone) ||
-        (profile.phone_no && profile.phone_no) ||
-        (profile.contact && profile.contact) ||
+        // Direct profile fields (validate they're actually phone numbers, not emails)
+        (profile.mobile && isValidPhoneNumber(profile.mobile) && profile.mobile) || 
+        (profile.phone && isValidPhoneNumber(profile.phone) && profile.phone) || 
+        (profile.officer_phone && isValidPhoneNumber(profile.officer_phone) && profile.officer_phone) || 
+        (profile.phone_number && isValidPhoneNumber(profile.phone_number) && profile.phone_number) ||
+        (profile.contact_number && isValidPhoneNumber(profile.contact_number) && profile.contact_number) ||
+        (profile.contact_phone && isValidPhoneNumber(profile.contact_phone) && profile.contact_phone) ||
+        (profile.phone_no && isValidPhoneNumber(profile.phone_no) && profile.phone_no) ||
+        (profile.contact && isValidPhoneNumber(profile.contact) && profile.contact) ||
         // Nested user object fields (common in Django REST Framework)
-        (userObj && userObj.mobile && userObj.mobile) ||
-        (userObj && userObj.phone && userObj.phone) ||
-        (userObj && userObj.phone_number && userObj.phone_number) ||
-        (userObj && userObj.contact_number && userObj.contact_number) ||
+        (userObj && userObj.mobile && isValidPhoneNumber(userObj.mobile) && userObj.mobile) ||
+        (userObj && userObj.phone && isValidPhoneNumber(userObj.phone) && userObj.phone) ||
+        (userObj && userObj.phone_number && isValidPhoneNumber(userObj.phone_number) && userObj.phone_number) ||
+        (userObj && userObj.contact_number && isValidPhoneNumber(userObj.contact_number) && userObj.contact_number) ||
         // SecurityOfficer model fields (if nested)
-        (securityOfficerObj && securityOfficerObj.mobile && securityOfficerObj.mobile) ||
-        (securityOfficerObj && securityOfficerObj.phone && securityOfficerObj.phone) ||
+        (securityOfficerObj && securityOfficerObj.mobile && isValidPhoneNumber(securityOfficerObj.mobile) && securityOfficerObj.mobile) ||
+        (securityOfficerObj && securityOfficerObj.phone && isValidPhoneNumber(securityOfficerObj.phone) && securityOfficerObj.phone) ||
         // Officer profile fields
-        (officerObj && officerObj.mobile && officerObj.mobile) ||
-        (officerObj && officerObj.phone && officerObj.phone) ||
-        // Fallback to Redux officer data
-        (officer.mobile && officer.mobile) || 
+        (officerObj && officerObj.mobile && isValidPhoneNumber(officerObj.mobile) && officerObj.mobile) ||
+        (officerObj && officerObj.phone && isValidPhoneNumber(officerObj.phone) && officerObj.phone) ||
+        // Fallback to Redux officer data (only if it's a valid phone number)
+        (officer.mobile && isValidPhoneNumber(officer.mobile) && officer.mobile) || 
         '';
       
       console.log('[ProfileScreen] Phone number extraction (comprehensive):', {
         'profile.mobile': profile.mobile,
         'profile.phone': profile.phone,
         'profile.officer_phone': profile.officer_phone,
+        'profile.officer_phone_is_email': profile.officer_phone && profile.officer_phone.includes('@'),
         'profile.phone_number': profile.phone_number,
         'profile.contact_number': profile.contact_number,
         'profile.user.mobile': userObj && userObj.mobile ? userObj.mobile : undefined,
@@ -100,6 +113,7 @@ export const ProfileScreen = ({ navigation }: any) => {
         'extracted_phone': phoneNumber,
         'profile_keys': profile ? Object.keys(profile) : [],
         'profile.user_keys': userObj ? Object.keys(userObj) : 'no user object',
+        'NOTE': 'officer_phone contains email, not phone number. User table data not included in profile response.',
       });
       
       // Merge with existing officer data
@@ -247,10 +261,16 @@ export const ProfileScreen = ({ navigation }: any) => {
   useEffect(() => {
     if (officer && profileData) {
       // Check if Redux officer has updated fields that differ from profileData
+      // Handle mobile field: check for both undefined and empty string differences
+      const mobileChanged = officer.mobile !== undefined && 
+                           (officer.mobile !== profileData.mobile || 
+                            (officer.mobile === '' && profileData.mobile !== '') ||
+                            (officer.mobile !== '' && profileData.mobile === ''));
+      
       const hasUpdates = 
         (officer.name && officer.name !== profileData.name) ||
         (officer.email_id && officer.email_id !== profileData.email_id) ||
-        (officer.mobile !== undefined && officer.mobile !== profileData.mobile) ||
+        mobileChanged ||
         (officer.badge_number !== undefined && officer.badge_number !== profileData.badge_number) ||
         (officer.shift_schedule !== undefined && officer.shift_schedule !== profileData.shift_schedule);
       
@@ -261,6 +281,8 @@ export const ProfileScreen = ({ navigation }: any) => {
           mobile: officer.mobile,
           badge_number: officer.badge_number,
           shift_schedule: officer.shift_schedule,
+          'current_profileData.mobile': profileData.mobile,
+          'mobileChanged': mobileChanged,
         });
         // Merge Redux updates into profileData for immediate UI update
         setProfileData({ 
@@ -274,13 +296,35 @@ export const ProfileScreen = ({ navigation }: any) => {
       }
     } else if (officer && !profileData) {
       // If profileData not loaded yet, use officer from Redux
+      console.log('[ProfileScreen] Setting profileData from Redux officer:', {
+        mobile: officer.mobile,
+      });
       setProfileData(officer);
     }
-  }, [officer?.name, officer?.email_id, officer?.mobile, officer?.badge_number, officer?.shift_schedule]);
+  }, [officer && officer.name ? officer.name : null, 
+      officer && officer.email_id ? officer.email_id : null, 
+      officer && officer.mobile !== undefined ? officer.mobile : null, 
+      officer && officer.badge_number !== undefined ? officer.badge_number : null, 
+      officer && officer.shift_schedule !== undefined ? officer.shift_schedule : null]);
 
   // Use profileData if available, otherwise fall back to officer from Redux
   // This ensures we always show the latest data (from API or Redux updates)
-  const displayOfficer = profileData || officer;
+  // Merge both sources to ensure we have the latest phone number
+  const displayOfficer = profileData ? {
+    ...profileData,
+    // Prioritize Redux officer.mobile if it exists and is different (more recent update)
+    mobile: (officer && officer.mobile !== undefined && officer.mobile !== '') 
+      ? officer.mobile 
+      : (profileData.mobile || ''),
+  } : officer;
+  
+  // Debug logging for phone number display
+  console.log('[ProfileScreen] Display officer phone number:', {
+    'profileData.mobile': profileData ? profileData.mobile : 'no profileData',
+    'officer.mobile': officer ? officer.mobile : 'no officer',
+    'displayOfficer.mobile': displayOfficer ? displayOfficer.mobile : 'no displayOfficer',
+    'displayOfficer exists': !!displayOfficer,
+  });
 
   // Get sample stats if not available
   const getSampleStats = () => {
@@ -497,9 +541,41 @@ export const ProfileScreen = ({ navigation }: any) => {
               <Text style={styles.infoIcon}>📞</Text>
               <Text style={styles.infoLabel}>Phone</Text>
               <Text style={styles.infoValue}>
-                {displayOfficer && displayOfficer.mobile && displayOfficer.mobile.trim() !== '' 
-                  ? displayOfficer.mobile 
-                  : 'NA'}
+                {(() => {
+                  // Try multiple sources for phone number with priority:
+                  // 1. Redux officer.mobile (most recent update)
+                  // 2. profileData.mobile (from API fetch)
+                  // 3. displayOfficer.mobile (merged data)
+                  let phone = '';
+                  
+                  if (officer && officer.mobile && typeof officer.mobile === 'string' && officer.mobile.trim() !== '') {
+                    phone = officer.mobile;
+                  } else if (profileData && profileData.mobile && typeof profileData.mobile === 'string' && profileData.mobile.trim() !== '') {
+                    phone = profileData.mobile;
+                  } else if (displayOfficer && displayOfficer.mobile && typeof displayOfficer.mobile === 'string' && displayOfficer.mobile.trim() !== '') {
+                    phone = displayOfficer.mobile;
+                  } else {
+                    phone = 'NA';
+                  }
+                  
+                  // Log for debugging (only log when phone is found to reduce noise)
+                  if (phone !== 'NA') {
+                    console.log('[ProfileScreen] Phone number found:', {
+                      'source': (officer && officer.mobile && officer.mobile.trim() !== '') ? 'Redux officer' :
+                               (profileData && profileData.mobile && profileData.mobile.trim() !== '') ? 'profileData' :
+                               'displayOfficer',
+                      'phone': phone,
+                    });
+                  } else {
+                    console.log('[ProfileScreen] Phone number NOT found:', {
+                      'officer.mobile': officer ? officer.mobile : 'no officer',
+                      'profileData.mobile': profileData ? profileData.mobile : 'no profileData',
+                      'displayOfficer.mobile': displayOfficer ? displayOfficer.mobile : 'no displayOfficer',
+                    });
+                  }
+                  
+                  return phone;
+                })()}
               </Text>
             </View>
             {displayOfficer && displayOfficer.badge_number && (

@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Alert } from '../../types/alert.types';
 import { colors, shadows } from '../../utils';
 import { formatRelativeTime, formatExactTime } from '../../utils/helpers';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface AlertCardProps {
   alert: Alert;
@@ -13,6 +14,8 @@ interface AlertCardProps {
 }
 
 export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete, onSolve }) => {
+  const { colors: themeColors } = useTheme();
+  
   // Check if emergency based on original_alert_type or alert_type
   // original_alert_type: 'emergency' or 'warning' (both are emergencies)
   // alert_type: 'emergency' (backend stored value)
@@ -123,48 +126,71 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
   const getBadgeStyle = () => {
     if (isEmergency) {
       return {
-        backgroundColor: colors.badgeRedBg,
+        backgroundColor: themeColors.badgeRedBg,
         text: '🚨 EMERGENCY',
-        textColor: colors.emergencyRed,
+        textColor: themeColors.emergencyRed,
       };
     }
     if (isCompleted) {
       return {
-        backgroundColor: colors.badgeGreenBg,
+        backgroundColor: themeColors.badgeGreenBg,
         text: '✓ SOLVED',
-        textColor: colors.successGreen,
+        textColor: themeColors.successGreen,
       };
     }
     return {
-      backgroundColor: colors.badgeBlueBg,
+      backgroundColor: themeColors.badgeBlueBg,
       text: '🔔 ACTIVE',
-      textColor: colors.infoBlue,
+      textColor: themeColors.infoBlue,
     };
   };
 
   const badgeStyle = getBadgeStyle();
 
   const getProfileBorderColor = () => {
-    if (isEmergency) return colors.emergencyRed;
-    if (isCompleted) return colors.successGreen;
-    return colors.infoBlue;
+    if (isEmergency) return themeColors.emergencyRed;
+    if (isCompleted) return themeColors.successGreen;
+    return themeColors.infoBlue;
   };
+
+  // Dynamic styles based on theme
+  const dynamicStyles = StyleSheet.create({
+    card: {
+      backgroundColor: themeColors.lightGrayBg,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 12,
+      marginHorizontal: 16,
+      ...shadows.md,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      flexDirection: 'row',
+      overflow: 'hidden',
+    },
+    leftAccent: {
+      width: 4,
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+    },
+  });
 
   return (
     <View
       style={[
-        styles.card,
+        dynamicStyles.card,
         isEmergency && styles.emergencyCard,
         isCompleted && styles.completedCard,
       ]}
     >
       <View
         style={[
-          styles.leftAccent,
+          dynamicStyles.leftAccent,
           {
             backgroundColor: isEmergency
-              ? colors.emergencyRed
-              : (isCompleted ? colors.successGreen : colors.infoBlue),
+              ? themeColors.emergencyRed
+              : (isCompleted ? themeColors.successGreen : themeColors.infoBlue),
           },
         ]}
       />
@@ -189,13 +215,13 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
                       : 'notifications' // Material design icon for normal alerts
                 } 
                 size={14} 
-                color={isEmergency ? colors.emergencyRed : colors.infoBlue} 
+                color={isEmergency ? themeColors.emergencyRed : themeColors.infoBlue} 
               />
               <View style={styles.alertTypeInfo}>
-                <Text style={[styles.alertTypeText, isCompleted && styles.completedText]}>
+                <Text style={[styles.alertTypeText, { color: themeColors.text }, isCompleted && styles.completedText]}>
                   {getAlertTypeDescription().type}
                 </Text>
-                <Text style={[styles.alertTypeDescription, isCompleted && styles.completedText]} numberOfLines={1}>
+                <Text style={[styles.alertTypeDescription, { color: themeColors.lightText }, isCompleted && styles.completedText]} numberOfLines={1}>
                   {getAlertTypeDescription().description}
                 </Text>
               </View>
@@ -203,66 +229,68 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
             {alert.priority && (
               <View style={[
                 styles.priorityBadge,
+                { backgroundColor: themeColors.lightGrayBg },
                 alert.priority === 'high' && styles.priorityHigh,
                 alert.priority === 'medium' && styles.priorityMedium,
               ]}>
-                <Text style={styles.priorityText}>{alert.priority.toUpperCase()}</Text>
+                <Text style={[styles.priorityText, { color: themeColors.text }]}>{alert.priority.toUpperCase()}</Text>
               </View>
             )}
           </View>
 
-          <Text style={[styles.userName, isCompleted && styles.completedText]}>
+          <Text style={[styles.userName, { color: themeColors.text }, isCompleted && styles.completedText]}>
             {alert.user_name}
           </Text>
-          <Text style={[styles.message, isCompleted && styles.completedText]} numberOfLines={2}>
+          <Text style={[styles.message, { color: themeColors.lightText }, isCompleted && styles.completedText]} numberOfLines={2}>
             {alert.message}
           </Text>
 
-          <Text style={[styles.timestamp, isCompleted && styles.completedText]}>
+          <Text style={[styles.timestamp, { color: themeColors.lightText }, isCompleted && styles.completedText]}>
             {formatExactTime(alert.created_at || alert.timestamp)}
           </Text>
-          <Text style={[styles.relativeTime, isCompleted && styles.completedText]}>
+          <Text style={[styles.relativeTime, { color: themeColors.lightText }, isCompleted && styles.completedText]}>
             {formatRelativeTime(alert.created_at || alert.timestamp)}
           </Text>
         </View>
 
         {/* Bottom buttons section */}
         {isCompleted ? (
-          <View style={styles.completedActions}>
-            <View style={styles.solvedBadge}>
-              <Icon name="check-circle" size={18} color={colors.successGreen} />
-              <Text style={styles.solvedBadgeText}>SOLVED</Text>
+          <View style={[styles.completedActions, { borderTopColor: themeColors.border }]}>
+            <View style={[styles.solvedBadge, { backgroundColor: themeColors.badgeGreenBg }]}>
+              <Icon name="check-circle" size={18} color={themeColors.successGreen} />
+              <Text style={[styles.solvedBadgeText, { color: themeColors.successGreen }]}>SOLVED</Text>
             </View>
           </View>
         ) : isAccepted ? (
-          <View style={styles.acceptedActions}>
+          <View style={[styles.acceptedActions, { borderTopColor: themeColors.border }]}>
             {onSolve ? (
               <TouchableOpacity
-                style={styles.solveButton}
+                style={[styles.solveButton, { backgroundColor: themeColors.primary }]}
                 onPress={() => onSolve(alert)}
                 activeOpacity={0.7}
               >
-                <Icon name="check-circle" size={18} color={colors.white} />
-                <Text style={styles.solveButtonText}>MARK SOLVED</Text>
+                <Icon name="check-circle" size={18} color={themeColors.white} />
+                <Text style={[styles.solveButtonText, { color: themeColors.white }]}>MARK SOLVED</Text>
               </TouchableOpacity>
             ) : (
-              <View style={styles.acceptedBadge}>
-                <Icon name="check-circle" size={18} color={colors.successGreen} />
+              <View style={[styles.acceptedBadge, { backgroundColor: themeColors.badgeGreenBg }]}>
+                <Icon name="check-circle" size={18} color={themeColors.successGreen} />
                 <Text style={styles.acceptedText}>RESPOND ACCEPTED</Text>
               </View>
             )}
           </View>
         ) : (
-          <View style={styles.bottomButtonsContainer}>
+          <View style={[styles.bottomButtonsContainer, { borderTopColor: themeColors.border }]}>
             <TouchableOpacity
               style={[
                 styles.respondButtonBottom,
-                isEmergency && styles.respondButtonBottomEmergency,
+                { backgroundColor: themeColors.primary },
+                isEmergency && [styles.respondButtonBottomEmergency, { backgroundColor: themeColors.emergencyRed }],
               ]}
               onPress={() => onRespond(alert)}
               activeOpacity={0.7}
             >
-              <Text style={styles.respondButtonBottomText}>RESPOND</Text>
+              <Text style={[styles.respondButtonBottomText, { color: themeColors.white }]}>RESPOND</Text>
             </TouchableOpacity>
             {onDelete && (
               <TouchableOpacity
@@ -270,8 +298,8 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
                 onPress={handleDelete}
                 activeOpacity={0.7}
               >
-                <Icon name="delete" size={18} color={colors.emergencyRed} />
-                <Text style={styles.deleteButtonText}>DELETE</Text>
+                <Icon name="delete" size={18} color={themeColors.emergencyRed} />
+                <Text style={[styles.deleteButtonText, { color: themeColors.emergencyRed }]}>DELETE</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -345,7 +373,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border || '#E5E7EB',
   },
   alertTypeContainer: {
     flexDirection: 'row',
@@ -359,20 +386,17 @@ const styles = StyleSheet.create({
   alertTypeText: {
     fontSize: 13,
     fontWeight: '600',
-    color: colors.darkText,
     marginBottom: 2,
   },
   alertTypeDescription: {
     fontSize: 11,
     fontWeight: '400',
-    color: colors.captionText,
     lineHeight: 14,
   },
   priorityBadge: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: colors.lightGrayBg,
   },
   priorityHigh: {
     backgroundColor: 'rgba(239, 68, 68, 0.15)',
@@ -383,32 +407,27 @@ const styles = StyleSheet.create({
   priorityText: {
     fontSize: 10,
     fontWeight: '600',
-    color: colors.darkText,
     letterSpacing: 0.5,
   },
   userName: {
     fontSize: 16,
     fontWeight: '600',
-    color: colors.darkText,
     letterSpacing: -0.2,
     marginBottom: 4,
   },
   message: {
     fontSize: 14,
     fontWeight: '400',
-    color: colors.lightText,
     lineHeight: 20,
     marginBottom: 6,
   },
   timestamp: {
     fontSize: 12,
     fontWeight: '400',
-    color: colors.captionText,
   },
   relativeTime: {
     fontSize: 11,
     fontWeight: '400',
-    color: colors.captionText,
     marginTop: 2,
     opacity: 0.8,
   },
@@ -421,24 +440,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border || '#E5E7EB',
   },
   respondButtonBottom: {
     flex: 1,
     height: 44,
-    backgroundColor: colors.primary,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
   },
   respondButtonBottomEmergency: {
-    backgroundColor: colors.emergencyRed,
+    // Background color applied via inline style
   },
   respondButtonBottomText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.white,
     letterSpacing: 0.5,
   },
   deleteButtonBottom: {
@@ -456,7 +472,6 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.emergencyRed,
     letterSpacing: 0.5,
   },
   completedActions: {
@@ -466,14 +481,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border || '#E5E7EB',
   },
   solvedBadge: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.badgeGreenBg,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -482,7 +495,6 @@ const styles = StyleSheet.create({
   solvedBadgeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.successGreen,
     letterSpacing: 0.5,
   },
   acceptedActions: {
@@ -492,14 +504,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.border || '#E5E7EB',
   },
   acceptedBadge: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.badgeGreenBg,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,

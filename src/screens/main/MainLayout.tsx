@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { BottomTabNavigator } from '../../components/navigation/BottomTabNavigator';
-import { colors } from '../../utils';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -12,20 +12,22 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   children,
   showBottomNav = true,
 }) => {
+  const { colors: themeColors } = useTheme();
+  
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+  });
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {children}
       {showBottomNav && <BottomTabNavigator />}
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.lightGrayBg,
-  },
-});
 
 
 

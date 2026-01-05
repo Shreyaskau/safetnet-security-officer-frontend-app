@@ -19,8 +19,10 @@ import { useAlerts } from '../../hooks/useAlerts';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { Alert } from '../../types/alert.types';
 import { colors, typography, spacing } from '../../utils';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export const AlertsScreen = ({ navigation, route }: any) => {
+  const { colors: themeColors } = useTheme();
   const { alerts, allAlerts, refreshing, filter, refreshAlerts, changeFilter, deleteAlert, closeAlert } = useAlerts();
   const { socket } = useSocket();
   const { isOffline } = useNetworkStatus();
@@ -105,23 +107,75 @@ export const AlertsScreen = ({ navigation, route }: any) => {
 
   const emergencyCount = displayAlerts.filter((a) => a.priority === 'high').length;
 
+  // Dynamic styles based on theme
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+      backgroundColor: themeColors.lightGrayBg,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+    },
+    title: {
+      ...typography.screenHeader,
+      color: themeColors.text,
+    },
+    filterTabs: {
+      backgroundColor: themeColors.lightGrayBg,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+    },
+    filterTab: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      marginHorizontal: spacing.xs,
+      borderRadius: 20,
+      backgroundColor: 'transparent',
+    },
+    filterTabActive: {
+      backgroundColor: themeColors.primary,
+    },
+    filterTabText: {
+      ...typography.buttonSmall,
+      color: themeColors.lightText,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    filterTabTextActive: {
+      color: themeColors.white,
+      fontWeight: '600',
+    },
+    list: {
+      padding: spacing.md,
+      paddingBottom: 100, // Space for FAB and stats
+    },
+  });
+
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={dynamicStyles.container}>
+      <View style={dynamicStyles.header}>
         <TouchableOpacity 
           onPress={() => {
             navigation.navigate('Settings');
           }}
         >
-          <Icon name="settings" size={24} color={colors.darkText} />
+          <Icon name="settings" size={24} color={themeColors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>ALERTS</Text>
+        <Text style={dynamicStyles.title}>ALERTS</Text>
         <TouchableOpacity onPress={() => navigation.navigate('Search')}>
-          <Icon name="search" size={24} color={colors.darkText} />
+          <Icon name="search" size={24} color={themeColors.text} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.filterTabs}>
+      <View style={dynamicStyles.filterTabs}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -134,14 +188,14 @@ export const AlertsScreen = ({ navigation, route }: any) => {
             return (
               <TouchableOpacity
                 key={filterItem.key}
-                style={[styles.filterTab, isActive && styles.filterTabActive]}
+                style={[dynamicStyles.filterTab, isActive && dynamicStyles.filterTabActive]}
                 onPress={() => changeFilter(filterItem.key)}
                 activeOpacity={0.7}
               >
                 <Text
                   style={[
-                    styles.filterTabText,
-                    isActive && styles.filterTabTextActive,
+                    dynamicStyles.filterTabText,
+                    isActive && dynamicStyles.filterTabTextActive,
                   ]}
                 >
                   {filterItem.label}
@@ -163,7 +217,7 @@ export const AlertsScreen = ({ navigation, route }: any) => {
         renderItem={({ item }) => (
           <AlertCard alert={item} onRespond={handleRespond} onDelete={handleDelete} onSolve={handleSolve} />
         )}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={dynamicStyles.list}
         ListEmptyComponent={
           <EmptyState
             icon="notifications"
@@ -191,63 +245,13 @@ export const AlertsScreen = ({ navigation, route }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.lightGrayBg,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  menuIcon: {
-    fontSize: 24,
-    color: colors.darkText,
-  },
-  title: {
-    ...typography.screenHeader,
-    color: colors.darkText,
-  },
-  bellIcon: {
-    fontSize: 24,
-    color: colors.darkText,
-  },
-  filterTabs: {
-    backgroundColor: colors.white,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
   filterTabsContent: {
-    paddingHorizontal: spacing.md,
-  },
-  filterTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: 20,
-    backgroundColor: colors.lightGrayBg,
-    marginRight: spacing.sm,
-  },
-  filterTabActive: {
-    backgroundColor: colors.primary,
-  },
-  filterTabText: {
-    ...typography.buttonSmall,
-    color: colors.darkText,
-  },
-  filterTabTextActive: {
-    color: colors.white,
   },
   filterBadge: {
     marginLeft: spacing.xs,
-    backgroundColor: colors.emergencyRed,
+    backgroundColor: colors.emergencyRed, // Keep static for emergency badge
     borderRadius: 10,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -256,10 +260,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     color: colors.white,
-  },
-  list: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
   },
 });
 
