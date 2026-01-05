@@ -17,6 +17,7 @@ import { loginSuccess } from '../../redux/slices/authSlice';
 import { useNavigation } from '@react-navigation/native';
 import { colors } from '../../utils';
 import Toast from 'react-native-toast-message';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // Safe logo loading - will use image if file exists, otherwise fallback to emoji
 const LOGO_PATH = '../../assets/images/safetnet-logo.png';
@@ -28,6 +29,7 @@ try {
 }
 
 export const LoginScreen = () => {
+  const { colors: themeColors, effectiveTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -161,14 +163,124 @@ export const LoginScreen = () => {
     }
   };
 
+  // Dynamic styles based on theme
+  const isDark = effectiveTheme === 'dark';
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: isDark ? themeColors.background : colors.white,
+    },
+    header: {
+      backgroundColor: isDark ? themeColors.background : colors.secondary,
+      paddingTop: 80,
+      paddingBottom: 32,
+      paddingHorizontal: 24,
+      alignItems: 'center',
+    },
+    logoFallback: {
+      fontSize: 80,
+      color: isDark ? themeColors.text : colors.white,
+    },
+    appName: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: isDark ? themeColors.text : colors.white,
+      letterSpacing: -0.5,
+    },
+    subtitle: {
+      fontSize: 14,
+      fontWeight: '400',
+      color: isDark ? themeColors.lightText : colors.white,
+      opacity: 0.7,
+      marginTop: 4,
+    },
+    form: {
+      backgroundColor: isDark ? themeColors.lightGrayBg : colors.white,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 24,
+      paddingTop: 32,
+      marginTop: -24,
+      flex: 1,
+    },
+    welcomeText: {
+      fontSize: 24,
+      fontWeight: '600',
+      color: themeColors.text,
+      letterSpacing: -0.5,
+    },
+    welcomeSubtext: {
+      fontSize: 14,
+      fontWeight: '400',
+      color: themeColors.lightText,
+      marginTop: 4,
+      marginBottom: 24,
+    },
+    inputLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: themeColors.lightText,
+      marginBottom: 8,
+    },
+    input: {
+      height: 52,
+      backgroundColor: isDark ? themeColors.background : colors.white,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      fontSize: 15,
+      fontWeight: '400',
+      color: themeColors.text,
+      marginBottom: 16,
+    },
+    inputFocused: {
+      borderColor: themeColors.primary,
+      borderWidth: 2,
+    },
+    eyeIconText: {
+      fontSize: 20,
+      color: themeColors.lightText,
+    },
+    forgotPassword: {
+      fontSize: 14,
+      fontWeight: '400',
+      color: themeColors.primary,
+      textAlign: 'right',
+    },
+    loginButton: {
+      height: 52,
+      backgroundColor: themeColors.primary,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    loginButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: themeColors.white,
+      letterSpacing: 0.5,
+    },
+    versionText: {
+      fontSize: 12,
+      fontWeight: '400',
+      color: themeColors.lightText,
+      textAlign: 'center',
+      position: 'absolute',
+      bottom: 16,
+      alignSelf: 'center',
+    },
+  });
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={dynamicStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header Section (40% of screen) */}
-        <View style={styles.header}>
+        <View style={dynamicStyles.header}>
           <View style={styles.logoContainer}>
             {logoSource ? (
               <Image
@@ -177,21 +289,21 @@ export const LoginScreen = () => {
                 resizeMode="contain"
               />
             ) : (
-              <Text style={styles.logoFallback}>🛡️</Text>
+              <Text style={dynamicStyles.logoFallback}>🛡️</Text>
             )}
           </View>
-          <Text style={styles.appName}>SafeTNet Security</Text>
-          <Text style={styles.subtitle}>Officer Portal</Text>
+          <Text style={dynamicStyles.appName}>SafeTNet Security</Text>
+          <Text style={dynamicStyles.subtitle}>Officer Portal</Text>
         </View>
 
         {/* Form Section (60% of screen) */}
-        <View style={styles.form}>
-          <Text style={styles.welcomeText}>Welcome Back</Text>
-          <Text style={styles.welcomeSubtext}>Sign in to continue monitoring</Text>
+        <View style={dynamicStyles.form}>
+          <Text style={dynamicStyles.welcomeText}>Welcome Back</Text>
+          <Text style={dynamicStyles.welcomeSubtext}>Sign in to continue monitoring</Text>
 
-          <Text style={styles.inputLabel}>Badge ID or Email</Text>
+          <Text style={dynamicStyles.inputLabel}>Badge ID or Email</Text>
           <TextInput
-            style={[styles.input, emailFocused && styles.inputFocused]}
+            style={[dynamicStyles.input, emailFocused && dynamicStyles.inputFocused]}
             placeholder="Enter your badge ID or email"
             value={email}
             onChangeText={setEmail}
@@ -199,7 +311,7 @@ export const LoginScreen = () => {
             onBlur={() => setEmailFocused(false)}
             autoCapitalize="none"
             keyboardType="email-address"
-            placeholderTextColor={colors.mediumGray}
+            placeholderTextColor={themeColors.lightText}
             returnKeyType="next"
             onSubmitEditing={() => {
               // Focus password field when Enter is pressed on email field
@@ -209,14 +321,14 @@ export const LoginScreen = () => {
             }}
           />
 
-          <Text style={styles.inputLabel}>Password</Text>
+          <Text style={dynamicStyles.inputLabel}>Password</Text>
           <View style={styles.passwordContainer}>
             <TextInput
               ref={passwordInputRef}
               style={[
-                styles.input,
+                dynamicStyles.input,
                 styles.passwordInput,
-                passwordFocused && styles.inputFocused,
+                passwordFocused && dynamicStyles.inputFocused,
               ]}
               placeholder="Enter your password"
               value={password}
@@ -224,7 +336,7 @@ export const LoginScreen = () => {
               onFocus={() => setPasswordFocused(true)}
               onBlur={() => setPasswordFocused(false)}
               secureTextEntry={!showPassword}
-              placeholderTextColor={colors.mediumGray}
+              placeholderTextColor={themeColors.lightText}
               returnKeyType="go"
               onSubmitEditing={handleLogin}
               blurOnSubmit={false}
@@ -233,28 +345,28 @@ export const LoginScreen = () => {
               style={styles.eyeIcon}
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Text style={styles.eyeIconText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+              <Text style={dynamicStyles.eyeIconText}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
             </TouchableOpacity>
           </View>
 
           <TouchableOpacity
             style={styles.forgotPasswordContainer}
-            onPress={() => navigation.navigate('ForgotPassword')}
+            onPress={() => navigation.navigate('ForgotPassword' as never)}
           >
-            <Text style={styles.forgotPassword}>Forgot Password?</Text>
+            <Text style={dynamicStyles.forgotPassword}>Forgot Password?</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.loginButton}
+            style={dynamicStyles.loginButton}
             onPress={handleLogin}
             disabled={isLoading}
           >
-            <Text style={styles.loginButtonText}>
+            <Text style={dynamicStyles.loginButtonText}>
               {isLoading ? 'LOGGING IN...' : 'LOGIN'}
             </Text>
           </TouchableOpacity>
 
-          <Text style={styles.versionText}>v2.2.0</Text>
+          <Text style={dynamicStyles.versionText}>v2.2.0</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -262,20 +374,8 @@ export const LoginScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
   scrollContent: {
     flexGrow: 1,
-  },
-  // Header Section (40% of screen)
-  header: {
-    backgroundColor: colors.secondary, // #1E3A8A
-    paddingTop: 80, // Account for status bar
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    alignItems: 'center',
   },
   logoContainer: {
     width: 200,
@@ -287,68 +387,6 @@ const styles = StyleSheet.create({
   logoImage: {
     width: '100%',
     height: '100%',
-  },
-  logoFallback: {
-    fontSize: 80,
-    color: colors.white,
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.white,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: colors.white,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  // Form Section (60% of screen)
-  form: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    marginTop: -24, // Overlap with header
-    flex: 1,
-  },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: colors.darkText,
-    letterSpacing: -0.5,
-  },
-  welcomeSubtext: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: colors.lightText,
-    marginTop: 4,
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.lightText,
-    marginBottom: 8,
-  },
-  input: {
-    height: 52,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border, // #E2E8F0
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 15,
-    fontWeight: '400',
-    color: colors.darkText,
-    marginBottom: 16,
-  },
-  inputFocused: {
-    borderColor: colors.primary,
-    borderWidth: 2,
   },
   passwordContainer: {
     position: 'relative',
@@ -363,41 +401,8 @@ const styles = StyleSheet.create({
     padding: 4,
     zIndex: 1,
   },
-  eyeIconText: {
-    fontSize: 20,
-    color: colors.mediumGray,
-  },
   forgotPasswordContainer: {
     alignItems: 'flex-end',
     marginBottom: 24,
-  },
-  forgotPassword: {
-    fontSize: 14,
-    fontWeight: '400',
-    color: colors.primary,
-    textAlign: 'right',
-  },
-  loginButton: {
-    height: 52,
-    backgroundColor: colors.primary, // #2563EB
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  loginButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.white,
-    letterSpacing: 0.5,
-  },
-  versionText: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: colors.captionText,
-    textAlign: 'center',
-    position: 'absolute',
-    bottom: 16,
-    alignSelf: 'center',
   },
 });

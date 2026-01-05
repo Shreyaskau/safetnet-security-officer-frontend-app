@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../utils';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface AlertStatsProps {
   active: number;
@@ -13,58 +14,64 @@ export const AlertStats: React.FC<AlertStatsProps> = ({
   pending,
   resolved,
 }) => {
+  const { colors: themeColors } = useTheme();
+
+  // Dynamic styles based on theme
+  const dynamicStyles = StyleSheet.create({
+    statsBar: {
+      backgroundColor: themeColors.lightGrayBg,
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      borderTopWidth: 1,
+      borderTopColor: themeColors.border,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    statValue: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: themeColors.text,
+      letterSpacing: -0.3,
+    },
+    pendingValue: {
+      color: themeColors.warningOrange, // Keep orange for pending
+    },
+    resolvedValue: {
+      color: themeColors.successGreen, // Keep green for resolved
+    },
+    statLabel: {
+      fontSize: 12,
+      fontWeight: '400',
+      color: themeColors.lightText,
+      marginTop: 2,
+    },
+  });
+
   return (
-    <View style={styles.statsBar}>
+    <View style={dynamicStyles.statsBar}>
       <View style={styles.statItem}>
-        <Text style={styles.statValue}>{active}</Text>
-        <Text style={styles.statLabel}>Active</Text>
+        <Text style={dynamicStyles.statValue}>{active}</Text>
+        <Text style={dynamicStyles.statLabel}>Active</Text>
       </View>
       <View style={styles.statItem}>
-        <Text style={[styles.statValue, styles.pendingValue]}>{pending}</Text>
-        <Text style={styles.statLabel}>Pending</Text>
+        <Text style={[dynamicStyles.statValue, dynamicStyles.pendingValue]}>{pending}</Text>
+        <Text style={dynamicStyles.statLabel}>Pending</Text>
       </View>
       <View style={styles.statItem}>
-        <Text style={[styles.statValue, styles.resolvedValue]}>{resolved}</Text>
-        <Text style={styles.statLabel}>Resolved</Text>
+        <Text style={[dynamicStyles.statValue, dynamicStyles.resolvedValue]}>{resolved}</Text>
+        <Text style={dynamicStyles.statLabel}>Resolved</Text>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  statsBar: {
-    backgroundColor: colors.white,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
   statItem: {
     alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.darkText,
-    letterSpacing: -0.3,
-  },
-  pendingValue: {
-    color: colors.warningOrange,
-  },
-  resolvedValue: {
-    color: colors.successGreen,
-  },
-  statLabel: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: colors.lightText,
-    marginTop: 2,
   },
 });

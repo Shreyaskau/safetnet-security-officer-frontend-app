@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { colors, typography, spacing } from '../../utils';
+import { useTheme } from '../../contexts/ThemeContext';
 
 interface TabItem {
   name: string;
@@ -19,6 +20,7 @@ const tabs: TabItem[] = [
 ];
 
 export const BottomTabNavigator = () => {
+  const { colors: themeColors, effectiveTheme } = useTheme();
   const navigation = useNavigation();
   const route = useRoute();
 
@@ -57,8 +59,53 @@ export const BottomTabNavigator = () => {
     }
   };
 
+  // Dynamic styles based on theme - Only pure black or white, no gray
+  const isDark = effectiveTheme === 'dark';
+  const backgroundColor = isDark ? '#000000' : '#FFFFFF'; // Pure black in dark, white in light
+  const activeColor = isDark ? '#FFFFFF' : '#000000'; // White in dark, black in light
+  const inactiveColor = isDark ? '#FFFFFF' : '#000000'; // White in dark, black in light (same color, different opacity)
+  const borderColor = isDark ? '#000000' : '#FFFFFF'; // Black border in dark, white border in light
+
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      backgroundColor: backgroundColor,
+      borderTopWidth: 1,
+      borderTopColor: borderColor,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.base,
+      justifyContent: 'space-around',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 8,
+    },
+    label: {
+      ...typography.caption,
+      color: inactiveColor,
+      fontSize: 12,
+      opacity: 0.5, // 50% opacity for inactive text
+    },
+    activeLabel: {
+      color: activeColor,
+      fontWeight: '600',
+      opacity: 1, // Fully opaque for active text
+    },
+    activeIndicator: {
+      position: 'absolute',
+      bottom: -spacing.sm,
+      left: '50%',
+      marginLeft: -20,
+      width: 40,
+      height: 3,
+      backgroundColor: activeColor,
+      borderRadius: 2,
+    },
+  });
+
   return (
-    <View style={styles.container}>
+    <View style={dynamicStyles.container}>
       {tabs.map((tab) => {
         // Check if this tab is active
         const isActive = 
@@ -78,13 +125,13 @@ export const BottomTabNavigator = () => {
             <Icon
               name={(isActive && tab.activeIcon) ? tab.activeIcon : tab.icon}
               size={24}
-              color={isActive ? colors.primary : colors.lightText}
-              style={styles.icon}
+              color={isActive ? activeColor : inactiveColor}
+              style={[styles.icon, { opacity: isActive ? 1 : 0.5 }]}
             />
-            <Text style={[styles.label, isActive && styles.activeLabel]}>
+            <Text style={[dynamicStyles.label, isActive && dynamicStyles.activeLabel]}>
               {tab.label}
             </Text>
-            {isActive && <View style={styles.activeIndicator} />}
+            {isActive && <View style={dynamicStyles.activeIndicator} />}
           </TouchableOpacity>
         );
       })}
@@ -93,20 +140,6 @@ export const BottomTabNavigator = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    backgroundColor: colors.white,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderGray,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
-    justifyContent: 'space-around',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 8,
-  },
   tab: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -115,25 +148,6 @@ const styles = StyleSheet.create({
   },
   icon: {
     marginBottom: spacing.xs,
-  },
-  label: {
-    ...typography.caption,
-    color: colors.lightText,
-    fontSize: 12,
-  },
-  activeLabel: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  activeIndicator: {
-    position: 'absolute',
-    bottom: -spacing.sm,
-    left: '50%',
-    marginLeft: -20,
-    width: 40,
-    height: 3,
-    backgroundColor: colors.primary,
-    borderRadius: 2,
   },
 });
 

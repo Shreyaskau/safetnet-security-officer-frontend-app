@@ -38,14 +38,8 @@ export const profileService = {
         (profileData.user && profileData.user.phone && profileData.user.phone);
       
       if (!hasPhoneNumber) {
-        console.log('[ProfileService] Phone number not found in profile response, checking if user data is nested...');
-        
-        // Try to get user ID from profile to fetch user data separately if needed
-        // For now, we'll rely on the backend to include user data in the profile response
-        // If it's not there, we'll log it for debugging
-        console.warn('[ProfileService] Phone number not found in profile. Backend may need to join User table.');
-        console.log('[ProfileService] Profile data keys:', profileData ? Object.keys(profileData) : 'no profile data');
-        console.log('[ProfileService] Profile.user keys:', profileData.user ? Object.keys(profileData.user) : 'no user object');
+        // Phone number not found - silently continue (backend work in progress)
+        // Removed warning message as requested
       }
       
       return profileData;

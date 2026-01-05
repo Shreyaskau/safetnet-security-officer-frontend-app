@@ -18,8 +18,10 @@ import { colors, shadows } from '../../utils';
 import { PerformanceChart } from '../../components/charts/PerformanceChart';
 import { profileService } from '../../api/services/profileService';
 import { geofenceService } from '../../api/services/geofenceService';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export const ProfileScreen = ({ navigation }: any) => {
+  const { colors: themeColors, effectiveTheme } = useTheme();
   const officer = useAppSelector((state) => state.auth.officer);
   const dispatch = useAppDispatch();
   const { logout: logoutUser } = useAuth();
@@ -379,7 +381,7 @@ export const ProfileScreen = ({ navigation }: any) => {
       value: formatNumber(sampleStats.total_responses),
       icon: '🔔',
       color: colors.primary,
-      cardColor: 'white',
+      cardColor: 'purple',
     },
     {
       label: 'Response Time',
@@ -405,39 +407,169 @@ export const ProfileScreen = ({ navigation }: any) => {
   ];
 
   const getCardStyle = (cardColor: string) => {
-    switch (cardColor) {
-      case 'blue':
-        return styles.statCardBlue;
-      case 'green':
-        return styles.statCardGreen;
-      case 'orange':
-        return styles.statCardOrange;
-      case 'purple':
-        return styles.statCardPurple;
-      default:
-        return null;
+    // In dark mode, use dark backgrounds; in light mode, use light tinted backgrounds
+    if (effectiveTheme === 'dark') {
+      // Dark mode: use dark gray with slight tint - more subtle and fitting with dark theme
+      switch (cardColor) {
+        case 'white':
+          return { backgroundColor: '#1A1A1A' }; // Slightly lighter than pure black, subtle
+        case 'blue':
+          return { backgroundColor: '#1A1F2E' }; // Darker blue-gray, more subtle
+        case 'green':
+          return { backgroundColor: '#1A2A1F' }; // Darker green-gray, more subtle
+        case 'orange':
+          return { backgroundColor: '#2A1F1A' }; // Darker orange-gray, more subtle
+        case 'purple':
+          return { backgroundColor: '#1F1A2A' }; // Darker purple-gray, more subtle
+        default:
+          return { backgroundColor: '#1A1A1A' }; // Subtle dark gray
+      }
+    } else {
+      // Light mode: use light tinted backgrounds
+      switch (cardColor) {
+        case 'white':
+          return styles.statCardBlue; // Use blue tint for white card in light mode
+        case 'blue':
+          return styles.statCardBlue;
+        case 'green':
+          return styles.statCardGreen;
+        case 'orange':
+          return styles.statCardOrange;
+        case 'purple':
+          return styles.statCardPurple;
+        default:
+          return null;
+      }
     }
   };
 
+  // Dynamic styles based on theme
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: effectiveTheme === 'dark' ? themeColors.background : colors.secondary,
+    },
+    headerSection: {
+      backgroundColor: effectiveTheme === 'dark' ? themeColors.background : colors.secondary,
+      paddingTop: 60,
+      paddingBottom: 40,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 0,
+    },
+    contentSection: {
+      backgroundColor: themeColors.lightGrayBg,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      marginTop: -20,
+      paddingTop: 24,
+      paddingBottom: 0,
+      minHeight: 'auto',
+      flex: 1,
+    },
+    statCard: {
+      width: '48%',
+      backgroundColor: themeColors.lightGrayBg,
+      borderRadius: 16,
+      padding: 16,
+      ...shadows.sm,
+      position: 'relative',
+      minHeight: 140,
+    },
+    statValue: {
+      fontSize: 28,
+      fontWeight: '700',
+      color: themeColors.text,
+      letterSpacing: -0.5,
+      marginTop: 8,
+      marginBottom: 8,
+      maxWidth: '85%',
+      flexShrink: 1,
+    },
+    statLabel: {
+      fontSize: 12,
+      fontWeight: '400',
+      color: themeColors.lightText,
+      marginTop: 4,
+      lineHeight: 16,
+    },
+    scoresSection: {
+      backgroundColor: themeColors.lightGrayBg,
+      borderRadius: 20,
+      padding: 20,
+      marginHorizontal: 16,
+      marginTop: 16,
+      ...shadows.lg,
+      borderWidth: 1,
+      borderColor: themeColors.border,
+      overflow: 'visible',
+    },
+    infoSection: {
+      backgroundColor: themeColors.lightGrayBg,
+      borderRadius: 12,
+      padding: 16,
+      marginHorizontal: 16,
+      marginTop: 16,
+      ...shadows.sm,
+    },
+    sectionHeader: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: themeColors.lightText,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      marginBottom: 16,
+    },
+    infoValue: {
+      fontSize: 14,
+      fontWeight: '400',
+      color: themeColors.text,
+      flex: 1,
+      textAlign: 'right',
+    },
+    infoLabel: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: themeColors.lightText,
+      marginLeft: 12,
+      minWidth: 80,
+    },
+    scoresSubtitle: {
+      fontSize: 13,
+      color: themeColors.lightText,
+      marginTop: 4,
+      fontWeight: '400',
+    },
+    loadingContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: themeColors.text,
+    },
+  });
+
   if (isLoading) {
     return (
-      <View style={[styles.container, styles.loadingContainer]}>
-        <StatusBar barStyle="light-content" backgroundColor={colors.secondary} />
-        <ActivityIndicator size="large" color={colors.white} />
-        <Text style={styles.loadingText}>Loading profile...</Text>
+      <View style={[dynamicStyles.container, dynamicStyles.loadingContainer]}>
+        <StatusBar barStyle={effectiveTheme === 'dark' ? 'light-content' : 'light-content'} backgroundColor={effectiveTheme === 'dark' ? themeColors.background : colors.secondary} />
+        <ActivityIndicator size="large" color={effectiveTheme === 'dark' ? themeColors.primary : colors.white} />
+        <Text style={dynamicStyles.loadingText}>Loading profile...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor={colors.secondary} />
+    <View style={dynamicStyles.container}>
+      <StatusBar barStyle={effectiveTheme === 'dark' ? 'light-content' : 'light-content'} backgroundColor={effectiveTheme === 'dark' ? themeColors.background : colors.secondary} />
       <ScrollView 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Header Section */}
-        <View style={styles.headerSection}>
+        <View style={dynamicStyles.headerSection}>
           <View style={styles.profileImageContainer}>
             {displayOfficer && displayOfficer.user_image ? (
               <Image
@@ -446,21 +578,21 @@ export const ProfileScreen = ({ navigation }: any) => {
               />
             ) : (
               <View style={[styles.profileImage, styles.profileImagePlaceholder]}>
-                <Text style={styles.profileImageText}>
+                <Text style={[styles.profileImageText, { color: effectiveTheme === 'dark' ? themeColors.text : colors.white }]}>
                   {displayOfficer && displayOfficer.name && typeof displayOfficer.name === 'string' ? displayOfficer.name.charAt(0).toUpperCase() : 'O'}
                 </Text>
               </View>
             )}
-            <TouchableOpacity style={styles.editButton}>
+            <TouchableOpacity style={[styles.editButton, { backgroundColor: effectiveTheme === 'dark' ? themeColors.lightGrayBg : colors.white }]}>
               <Text style={styles.editIcon}>✏️</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.officerName}>{displayOfficer && displayOfficer.name ? displayOfficer.name : 'Officer'}</Text>
-          <Text style={styles.badgeNumber}>#{displayOfficer && displayOfficer.security_id ? displayOfficer.security_id : 'N/A'}</Text>
+          <Text style={[styles.officerName, { color: effectiveTheme === 'dark' ? themeColors.text : colors.white }]}>{displayOfficer && displayOfficer.name ? displayOfficer.name : 'Officer'}</Text>
+          <Text style={[styles.badgeNumber, { color: effectiveTheme === 'dark' ? themeColors.lightText : colors.white }]}>#{displayOfficer && displayOfficer.security_id ? displayOfficer.security_id : 'N/A'}</Text>
 
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>
+          <View style={[styles.roleBadge, { backgroundColor: effectiveTheme === 'dark' ? themeColors.lightGrayBg : 'rgba(255, 255, 255, 0.2)' }]}>
+            <Text style={[styles.roleText, { color: effectiveTheme === 'dark' ? themeColors.text : colors.white }]}>
               {displayOfficer && displayOfficer.security_role 
                 ? displayOfficer.security_role.charAt(0).toUpperCase() + displayOfficer.security_role.slice(1)
                 : 'Security Officer'}
@@ -469,33 +601,33 @@ export const ProfileScreen = ({ navigation }: any) => {
 
           <View style={styles.quickStats}>
             <View style={styles.quickStatItem}>
-              <Text style={styles.quickStatValue}>
+              <Text style={[styles.quickStatValue, { color: effectiveTheme === 'dark' ? themeColors.text : colors.white }]}>
                 {formatNumber(sampleStats.total_responses)}
               </Text>
-              <Text style={styles.quickStatLabel}>Alerts</Text>
+              <Text style={[styles.quickStatLabel, { color: effectiveTheme === 'dark' ? themeColors.lightText : colors.white }]}>Alerts</Text>
             </View>
             <View style={styles.quickStatItem}>
-              <Text style={styles.quickStatValue}>
+              <Text style={[styles.quickStatValue, { color: effectiveTheme === 'dark' ? themeColors.text : colors.white }]}>
                 {formatResponseTime(sampleStats.avg_response_time)}
               </Text>
-              <Text style={styles.quickStatLabel}>Avg Time</Text>
+              <Text style={[styles.quickStatLabel, { color: effectiveTheme === 'dark' ? themeColors.lightText : colors.white }]}>Avg Time</Text>
             </View>
             <View style={styles.quickStatItem}>
-              <Text style={styles.quickStatValue}>
+              <Text style={[styles.quickStatValue, { color: effectiveTheme === 'dark' ? themeColors.text : colors.white }]}>
                 {formatPercentage(sampleStats.area_coverage)}
               </Text>
-              <Text style={styles.quickStatLabel}>Coverage</Text>
+              <Text style={[styles.quickStatLabel, { color: effectiveTheme === 'dark' ? themeColors.lightText : colors.white }]}>Coverage</Text>
             </View>
           </View>
         </View>
 
         {/* Content Section */}
-        <View style={styles.contentSection}>
+        <View style={dynamicStyles.contentSection}>
           <View style={styles.statsGrid}>
             {stats.map((stat, index) => (
               <View
                 key={index}
-                style={[styles.statCard, getCardStyle(stat.cardColor)]}
+                style={[dynamicStyles.statCard, getCardStyle(stat.cardColor)]}
               >
                 {index === 0 && (
                   <View style={styles.statBadge}>
@@ -504,23 +636,23 @@ export const ProfileScreen = ({ navigation }: any) => {
                 )}
                 <Text style={styles.statIcon}>{stat.icon}</Text>
                 <View style={styles.statContent}>
-                  <Text style={styles.statValue} numberOfLines={1}>{stat.value}</Text>
-                  <Text style={styles.statLabel} numberOfLines={2}>{stat.label}</Text>
+                  <Text style={dynamicStyles.statValue} numberOfLines={1}>{stat.value}</Text>
+                  <Text style={dynamicStyles.statLabel} numberOfLines={2}>{stat.label}</Text>
                 </View>
               </View>
             ))}
           </View>
 
           {/* Performance Scores Section */}
-          <View style={styles.scoresSection}>
-            <View style={styles.scoresHeader}>
+          <View style={dynamicStyles.scoresSection}>
+            <View style={[styles.scoresHeader, { borderBottomColor: themeColors.border }]}>
               <View style={styles.scoresHeaderLeft}>
-                <View style={styles.scoresHeaderIconContainer}>
+                <View style={[styles.scoresHeaderIconContainer, { backgroundColor: effectiveTheme === 'dark' ? themeColors.lightGrayBg : '#FEF3C7' }]}>
                   <Text style={styles.scoresHeaderIcon}>🏆</Text>
                 </View>
                 <View style={styles.scoresHeaderText}>
-                  <Text style={styles.sectionHeader}>PERFORMANCE SCORES</Text>
-                  <Text style={styles.scoresSubtitle}>Your overall performance metrics</Text>
+                  <Text style={dynamicStyles.sectionHeader}>PERFORMANCE SCORES</Text>
+                  <Text style={dynamicStyles.scoresSubtitle}>Your overall performance metrics</Text>
                 </View>
               </View>
             </View>
@@ -530,17 +662,17 @@ export const ProfileScreen = ({ navigation }: any) => {
           </View>
 
           {/* Contact Information */}
-          <View style={styles.infoSection}>
-            <Text style={styles.sectionHeader}>CONTACT DETAILS</Text>
-            <View style={styles.infoRow}>
+          <View style={dynamicStyles.infoSection}>
+            <Text style={dynamicStyles.sectionHeader}>CONTACT DETAILS</Text>
+            <View style={[styles.infoRow, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.infoIcon}>📧</Text>
-              <Text style={styles.infoLabel}>Email</Text>
-              <Text style={styles.infoValue}>{displayOfficer && displayOfficer.email_id ? displayOfficer.email_id : 'N/A'}</Text>
+              <Text style={dynamicStyles.infoLabel}>Email</Text>
+              <Text style={dynamicStyles.infoValue}>{displayOfficer && displayOfficer.email_id ? displayOfficer.email_id : 'N/A'}</Text>
             </View>
-            <View style={styles.infoRow}>
+            <View style={[styles.infoRow, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.infoIcon}>📞</Text>
-              <Text style={styles.infoLabel}>Phone</Text>
-              <Text style={styles.infoValue}>
+              <Text style={dynamicStyles.infoLabel}>Phone</Text>
+              <Text style={dynamicStyles.infoValue}>
                 {(() => {
                   // Try multiple sources for phone number with priority:
                   // 1. Redux officer.mobile (most recent update)
@@ -558,57 +690,44 @@ export const ProfileScreen = ({ navigation }: any) => {
                     phone = 'NA';
                   }
                   
-                  // Log for debugging (only log when phone is found to reduce noise)
-                  if (phone !== 'NA') {
-                    console.log('[ProfileScreen] Phone number found:', {
-                      'source': (officer && officer.mobile && officer.mobile.trim() !== '') ? 'Redux officer' :
-                               (profileData && profileData.mobile && profileData.mobile.trim() !== '') ? 'profileData' :
-                               'displayOfficer',
-                      'phone': phone,
-                    });
-                  } else {
-                    console.log('[ProfileScreen] Phone number NOT found:', {
-                      'officer.mobile': officer ? officer.mobile : 'no officer',
-                      'profileData.mobile': profileData ? profileData.mobile : 'no profileData',
-                      'displayOfficer.mobile': displayOfficer ? displayOfficer.mobile : 'no displayOfficer',
-                    });
-                  }
+                  // Phone number extraction - warnings removed as requested
+                  // Logging removed for phone number not found cases
                   
                   return phone;
                 })()}
               </Text>
             </View>
             {displayOfficer && displayOfficer.badge_number && (
-              <View style={styles.infoRow}>
+              <View style={[styles.infoRow, { borderBottomColor: themeColors.border }]}>
                 <Text style={styles.infoIcon}>🆔</Text>
-                <Text style={styles.infoLabel}>Badge Number</Text>
-                <Text style={styles.infoValue}>{displayOfficer.badge_number}</Text>
+                <Text style={dynamicStyles.infoLabel}>Badge Number</Text>
+                <Text style={dynamicStyles.infoValue}>{displayOfficer.badge_number}</Text>
               </View>
             )}
             {geofenceName && (
-              <View style={styles.infoRow}>
+              <View style={[styles.infoRow, { borderBottomColor: themeColors.border }]}>
                 <Text style={styles.infoIcon}>📍</Text>
-                <Text style={styles.infoLabel}>Assigned Geofence</Text>
-                <Text style={styles.infoValue}>{geofenceName}</Text>
+                <Text style={dynamicStyles.infoLabel}>Assigned Geofence</Text>
+                <Text style={dynamicStyles.infoValue}>{geofenceName}</Text>
               </View>
             )}
             {displayOfficer && displayOfficer.shift_schedule && (
-              <View style={styles.infoRow}>
+              <View style={[styles.infoRow, { borderBottomColor: themeColors.border }]}>
                 <Text style={styles.infoIcon}>🕐</Text>
-                <Text style={styles.infoLabel}>Shift Schedule</Text>
-                <Text style={styles.infoValue}>{displayOfficer.shift_schedule}</Text>
+                <Text style={dynamicStyles.infoLabel}>Shift Schedule</Text>
+                <Text style={dynamicStyles.infoValue}>{displayOfficer.shift_schedule}</Text>
               </View>
             )}
-            <View style={styles.infoRow}>
+            <View style={[styles.infoRow, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.infoIcon}>🆔</Text>
-              <Text style={styles.infoLabel}>Security ID</Text>
-              <Text style={styles.infoValue}>#{displayOfficer && displayOfficer.security_id ? displayOfficer.security_id : 'N/A'}</Text>
+              <Text style={dynamicStyles.infoLabel}>Security ID</Text>
+              <Text style={dynamicStyles.infoValue}>#{displayOfficer && displayOfficer.security_id ? displayOfficer.security_id : 'N/A'}</Text>
             </View>
-            <View style={[styles.infoRow, styles.infoRowLast]}>
+            <View style={[styles.infoRow, styles.infoRowLast, { borderBottomColor: themeColors.border }]}>
               <Text style={styles.infoIcon}>✓</Text>
-              <Text style={styles.infoLabel}>Status</Text>
+              <Text style={dynamicStyles.infoLabel}>Status</Text>
               <Text style={[
-                styles.infoValue,
+                dynamicStyles.infoValue,
                 displayOfficer && displayOfficer.status === 'active' ? styles.statusActive : styles.statusInactive
               ]}>
                 {displayOfficer && displayOfficer.status 
@@ -620,22 +739,22 @@ export const ProfileScreen = ({ navigation }: any) => {
 
           {/* Update Button */}
           <TouchableOpacity
-            style={styles.updateButton}
+            style={[styles.updateButton, { backgroundColor: themeColors.primary }]}
             onPress={() => {
               navigation.navigate('UpdateProfile');
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.updateButtonText}>UPDATE PROFILE</Text>
+            <Text style={[styles.updateButtonText, { color: themeColors.white }]}>UPDATE PROFILE</Text>
           </TouchableOpacity>
 
           {/* Logout Button */}
           <TouchableOpacity
-            style={styles.logoutButton}
+            style={[styles.logoutButton, { backgroundColor: themeColors.emergencyRed }]}
             onPress={() => setShowLogoutModal(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.logoutButtonText}>LOGOUT</Text>
+            <Text style={[styles.logoutButtonText, { color: themeColors.white }]}>LOGOUT</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
