@@ -48,8 +48,10 @@ export const BroadcastProgressModal: React.FC<BroadcastProgressModalProps> = ({
     >
       <View style={styles.overlay}>
         <View style={styles.modal}>
-          <Text style={styles.title}>Broadcasting Alert</Text>
-          <Text style={styles.message}>Sending to {totalUsers} users...</Text>
+          <Text style={styles.title}>Sending Alert</Text>
+          <Text style={styles.message}>
+            {totalUsers > 0 ? `Sending to ${totalUsers} ${totalUsers === 1 ? 'user' : 'users'}...` : 'Sending alert...'}
+          </Text>
 
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>

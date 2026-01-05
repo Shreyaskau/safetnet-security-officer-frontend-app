@@ -16,10 +16,12 @@ import { GeofenceArea } from '../../types/location.types';
 import { updateOfficerProfile } from '../../redux/slices/authSlice';
 import { useAppDispatch } from '../../redux/hooks';
 import { requestLocationPermissionWithCheck } from '../../utils/permissions';
+import { useTheme } from '../../contexts/ThemeContext';
 
 export const GeofenceMapScreen = ({ navigation }: any) => {
   const officer = useAppSelector((state) => state.auth.officer);
   const dispatch = useAppDispatch();
+  const { colors: themeColors, effectiveTheme } = useTheme();
   const { location } = useLocation();
   const { allAlerts } = useAlerts(); // Get actual alert data from backend
   const [geofence, setGeofence] = useState<GeofenceArea | null>(null);
@@ -295,86 +297,64 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                 const newLng = position.coords.longitude;
                 const newAccuracy = position.coords.accuracy ? position.coords.accuracy : undefined;
                 
-                // Check if we have a previous stable location
-                const lastStable = lastStableLocationRef.current;
-                let shouldUpdate = false;
+                // Always update location every second for maximum stability
+                // No distance filter - update every second regardless of movement
+                const newLocation = {
+                  latitude: newLat,
+                  longitude: newLng,
+                  accuracy: newAccuracy,
+                };
                 
-                if (lastStable === null) {
-                  // First location update - always accept
-                  shouldUpdate = true;
-                } else {
-                  // Calculate distance from last stable location
-                  const distance = calculateDistance(
-                    lastStable.latitude,
-                    lastStable.longitude,
-                    newLat,
-                    newLng
-                  );
+                // Update last stable location ref
+                lastStableLocationRef.current = {
+                  latitude: newLat,
+                  longitude: newLng
+                };
+                
+                // Update state every second for stable tracking
+                setCurrentLocation(newLocation);
+                
+                // Check if officer entered/exited geofence area
+                if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
+                  const isInside = isPointInPolygon(newLocation, geofence.coordinates);
                   
-                  // Only update if movement >= 6 meters
-                  if (distance >= 6) {
-                    shouldUpdate = true;
+                  // Check if state changed (entered or exited)
+                  if (wasInsideGeofence !== null && wasInsideGeofence !== isInside) {
+                    if (isInside && !wasInsideGeofence) {
+                      // Officer entered the geofence area
+                      Alert.alert(
+                        '✅ Area Entered',
+                        'You have entered your allocated area: ' + (geofence.name || 'Geofence Area'),
+                        [{ text: 'OK', style: 'default' }],
+                        { cancelable: true }
+                      );
+                      console.log('[GeofenceMap] ✅ Officer entered geofence area:', geofence.name);
+                    } else if (!isInside && wasInsideGeofence) {
+                      // Officer exited the geofence area
+                      Alert.alert(
+                        '⚠️ Area Exited',
+                        'You have left your allocated area: ' + (geofence.name || 'Geofence Area'),
+                        [{ text: 'OK', style: 'default' }],
+                        { cancelable: true }
+                      );
+                      console.log('[GeofenceMap] ⚠️ Officer exited geofence area:', geofence.name);
+                    }
                   }
+                  
+                  setWasInsideGeofence(isInside);
+                } else if (wasInsideGeofence === null) {
+                  // Initialize state if geofence is not loaded yet
+                  setWasInsideGeofence(false);
                 }
                 
-                if (shouldUpdate) {
-                  const newLocation = {
-                    latitude: newLat,
-                    longitude: newLng,
-                    accuracy: newAccuracy,
-                  };
-                  
-                  // Update last stable location ref
-                  lastStableLocationRef.current = {
-                    latitude: newLat,
-                    longitude: newLng
-                  };
-                  
-                  // Update state
-                  setCurrentLocation(newLocation);
-                  
-                  // Check if officer entered/exited geofence area
-                  if (geofence && geofence.coordinates && geofence.coordinates.length > 0) {
-                    const isInside = isPointInPolygon(newLocation, geofence.coordinates);
-                    
-                    // Check if state changed (entered or exited)
-                    if (wasInsideGeofence !== null && wasInsideGeofence !== isInside) {
-                      if (isInside && !wasInsideGeofence) {
-                        // Officer entered the geofence area
-                        Alert.alert(
-                          '✅ Area Entered',
-                          'You have entered your allocated area: ' + (geofence.name || 'Geofence Area'),
-                          [{ text: 'OK', style: 'default' }],
-                          { cancelable: true }
-                        );
-                        console.log('[GeofenceMap] ✅ Officer entered geofence area:', geofence.name);
-                      } else if (!isInside && wasInsideGeofence) {
-                        // Officer exited the geofence area
-                        Alert.alert(
-                          '⚠️ Area Exited',
-                          'You have left your allocated area: ' + (geofence.name || 'Geofence Area'),
-                          [{ text: 'OK', style: 'default' }],
-                          { cancelable: true }
-                        );
-                        console.log('[GeofenceMap] ⚠️ Officer exited geofence area:', geofence.name);
-                      }
-                    }
-                    
-                    setWasInsideGeofence(isInside);
-                  } else if (wasInsideGeofence === null) {
-                    // Initialize state if geofence is not loaded yet
-                    setWasInsideGeofence(false);
-                  }
-                  
-                  // Update map marker position only (don't recreate)
-                  if (webViewRef.current) {
-                    const accuracyValue = newAccuracy ? newAccuracy : 50;
-                    const script = 
-                      'if (window.map && typeof window.map.fitBounds === "function" && window.updateUserLocation) {' +
-                      '  window.updateUserLocation(' + newLat + ', ' + newLng + ', ' + accuracyValue + ');' +
-                      '}';
-                    webViewRef.current.injectJavaScript(script);
-                  }
+                // Update map marker position every second for stable tracking
+                if (webViewRef.current) {
+                  const accuracyValue = newAccuracy ? newAccuracy : 50;
+                  const script = 
+                    'if (window.map && typeof window.map.fitBounds === "function" && window.updateUserLocation) {' +
+                    '  window.updateUserLocation(' + newLat + ', ' + newLng + ', ' + accuracyValue + ');' +
+                    '}';
+                  webViewRef.current.injectJavaScript(script);
                 }
               }
             } catch (error) {
@@ -386,10 +366,11 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
           },
           {
             enableHighAccuracy: true,
-            distanceFilter: 0,
-            interval: 1000,
-            fastestInterval: 1000,
+            distanceFilter: 0, // No distance filter - we handle filtering in code
+            interval: 1000, // Update every 1 second
+            fastestInterval: 1000, // Fastest update interval is 1 second
             showLocationDialog: true,
+            forceRequestLocation: true, // Force location request for better accuracy
           }
         );
       } catch (error) {
@@ -422,6 +403,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
         geofence.coordinates.map(c => [c.latitude, c.longitude])
       );
       const center = getMapCenter();
+      const primaryColor = themeColors.primary || '#2563eb';
       
       const script = `
         if (window.map && typeof window.map.fitBounds === 'function' && typeof L !== 'undefined' && L.map && typeof map !== 'undefined') {
@@ -433,8 +415,8 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
           const geofenceCoords = ${geofencePolygon};
           if (geofenceCoords && geofenceCoords.length > 0) {
             window.geofencePolygonLayer = L.polygon(geofenceCoords, {
-              color: '#2563eb',
-              fillColor: '#2563eb',
+              color: '${primaryColor}',
+              fillColor: '${primaryColor}',
               fillOpacity: 0.2,
               weight: 2
             }).addTo(map);
@@ -477,17 +459,166 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
         }
       }, 300);
     }
-  }, [geofence]); // Only depend on geofence, not currentLocation
+  }, [geofence, themeColors]); // Depend on geofence and themeColors
+
+  // Dynamic styles based on theme
+  const dynamicStyles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: themeColors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: spacing.base,
+      paddingVertical: spacing.md,
+      backgroundColor: themeColors.lightGrayBg,
+      borderBottomWidth: 1,
+      borderBottomColor: themeColors.border,
+    },
+    backIcon: {
+      fontSize: 24,
+      color: themeColors.text,
+    },
+    headerCenter: {
+      alignItems: 'center',
+    },
+    title: {
+      ...typography.sectionHeader,
+      color: themeColors.text,
+    },
+    subtitle: {
+      ...typography.caption,
+      color: themeColors.lightText,
+      marginTop: spacing.xs,
+    },
+    menuIcon: {
+      fontSize: 24,
+      color: themeColors.text,
+    },
+    map: {
+      flex: 1,
+    },
+    infoCard: {
+      backgroundColor: themeColors.white,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: spacing.lg,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    infoHeader: {
+      ...typography.caption,
+      color: themeColors.lightText,
+      textTransform: 'uppercase',
+      marginBottom: spacing.md,
+    },
+    infoRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: spacing.base,
+    },
+    infoLeft: {
+      flex: 1,
+    },
+    areaName: {
+      ...typography.sectionHeader,
+      color: themeColors.text,
+      marginBottom: spacing.xs,
+    },
+    zoneBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: themeColors.primary,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderRadius: 12,
+      marginBottom: spacing.xs,
+    },
+    zoneText: {
+      ...typography.caption,
+      color: themeColors.white,
+      fontWeight: '600',
+    },
+    coverage: {
+      ...typography.caption,
+      color: themeColors.lightText,
+    },
+    infoRight: {
+      alignItems: 'flex-end',
+    },
+    userCount: {
+      ...typography.screenHeader,
+      color: themeColors.successGreen,
+      marginBottom: spacing.xs,
+    },
+    userLabel: {
+      ...typography.caption,
+      color: themeColors.lightText,
+    },
+    statsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginTop: spacing.md,
+      paddingTop: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: themeColors.border,
+    },
+    statItem: {
+      alignItems: 'center',
+    },
+    statValue: {
+      ...typography.screenHeader,
+      color: themeColors.text,
+      marginBottom: spacing.xs,
+    },
+    statLabel: {
+      ...typography.caption,
+      color: themeColors.lightText,
+    },
+    statBadge: {
+      backgroundColor: themeColors.lightGrayBg,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+      borderRadius: 12,
+    },
+    statText: {
+      ...typography.caption,
+      fontSize: 11,
+      color: themeColors.text,
+    },
+    viewButton: {
+      backgroundColor: themeColors.mediumGray,
+      paddingVertical: spacing.md,
+      borderRadius: 12,
+      alignItems: 'center',
+      marginBottom: spacing.sm,
+    },
+    viewButtonText: {
+      ...typography.buttonLarge,
+      color: themeColors.white,
+    },
+    broadcastLink: {
+      alignItems: 'center',
+    },
+    broadcastText: {
+      ...typography.secondary,
+      color: themeColors.primary,
+    },
+  });
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={dynamicStyles.container}>
+      <View style={dynamicStyles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backIcon}>←</Text>
+          <Text style={dynamicStyles.backIcon}>←</Text>
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.title}>GEOFENCE AREA</Text>
-          <Text style={styles.subtitle}>
+        <View style={dynamicStyles.headerCenter}>
+          <Text style={dynamicStyles.title}>GEOFENCE AREA</Text>
+          <Text style={dynamicStyles.subtitle}>
             {isLoading ? 'Loading...' : (geofence && geofence.name ? geofence.name : 'No area assigned')}
           </Text>
         </View>
@@ -569,7 +700,7 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
             }
           }}
         >
-          <Text style={styles.menuIcon}>↻</Text>
+          <Text style={dynamicStyles.menuIcon}>↻</Text>
         </TouchableOpacity>
       </View>
 
@@ -577,8 +708,8 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       <WebView
         ref={webViewRef}
         key={`map-${geofence && geofence.geofence_id ? geofence.geofence_id : 'no-geofence'}`}
-        source={{ html: getLeafletMapHTML(mapCenter, geofence, currentLocation) }}
-        style={styles.map}
+        source={{ html: getLeafletMapHTML(mapCenter, geofence, currentLocation, themeColors, effectiveTheme) }}
+        style={dynamicStyles.map}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         startInLoadingState={true}
@@ -589,13 +720,14 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
             const geofencePolygon = JSON.stringify(
               geofence.coordinates.map(c => [c.latitude, c.longitude])
             );
+            const primaryColor = themeColors.primary || '#2563eb';
             const script = `
               if (window.map && typeof window.map.fitBounds === 'function' && typeof L !== 'undefined' && L.map && typeof map !== 'undefined') {
                 const geofenceCoords = ${geofencePolygon};
                 if (geofenceCoords && geofenceCoords.length > 0) {
                   const polygon = L.polygon(geofenceCoords, {
-                    color: '#2563eb',
-                    fillColor: '#2563eb',
+                    color: '${primaryColor}',
+                    fillColor: '${primaryColor}',
                     fillOpacity: 0.2,
                     weight: 2
                   }).addTo(map);
@@ -651,41 +783,41 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
         }}
       />
 
-      <View style={styles.infoCard}>
-        <Text style={styles.infoHeader}>YOUR ASSIGNED AREA</Text>
+      <View style={dynamicStyles.infoCard}>
+        <Text style={dynamicStyles.infoHeader}>YOUR ASSIGNED AREA</Text>
         {isLoading ? (
-          <View style={styles.infoRow}>
-            <View style={styles.infoLeft}>
-              <Text style={styles.areaName}>Loading area details...</Text>
+          <View style={dynamicStyles.infoRow}>
+            <View style={dynamicStyles.infoLeft}>
+              <Text style={dynamicStyles.areaName}>Loading area details...</Text>
             </View>
           </View>
         ) : geofence ? (
           <>
-            <View style={styles.infoRow}>
-              <View style={styles.infoLeft}>
-                <Text style={styles.areaName}>{geofence.name}</Text>
-                <View style={styles.zoneBadge}>
-                  <Text style={styles.zoneText}>Zone {String(geofence.geofence_id).slice(-1)}</Text>
+            <View style={dynamicStyles.infoRow}>
+              <View style={dynamicStyles.infoLeft}>
+                <Text style={dynamicStyles.areaName}>{geofence.name}</Text>
+                <View style={dynamicStyles.zoneBadge}>
+                  <Text style={dynamicStyles.zoneText}>Zone {String(geofence.geofence_id).slice(-1)}</Text>
                 </View>
-                <Text style={styles.coverage}>
+                <Text style={dynamicStyles.coverage}>
                   {(geofence.area_size && typeof geofence.area_size === 'number') ? geofence.area_size.toFixed(1) : '0'} km² • {geofence.radius ? (geofence.radius / 1000).toFixed(1) : '1.5'} km radius
                 </Text>
               </View>
-              <View style={styles.infoRight}>
-                <Text style={styles.userCount}>
+              <View style={dynamicStyles.infoRight}>
+                <Text style={dynamicStyles.userCount}>
                   {geofence.active_users_count || 0}
                 </Text>
-                <Text style={styles.userLabel}>Users Monitored</Text>
+                <Text style={dynamicStyles.userLabel}>Users Monitored</Text>
               </View>
             </View>
           </>
         ) : (
-          <View style={styles.infoRow}>
-            <View style={styles.infoLeft}>
-              <Text style={styles.areaName}>
+          <View style={dynamicStyles.infoRow}>
+            <View style={dynamicStyles.infoLeft}>
+              <Text style={dynamicStyles.areaName}>
                 {isLoading ? 'Loading area details...' : 'No area assigned'}
               </Text>
-              <Text style={styles.coverage}>
+              <Text style={dynamicStyles.coverage}>
                 Please contact administrator to assign a geofence area
               </Text>
             </View>
@@ -693,29 +825,29 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
         )}
         {geofence && (
           <>
-            <View style={styles.statsRow}>
-              <View style={styles.statBadge}>
-                <Text style={styles.statText}>🔴 {allAlerts.filter((a) => a && a.priority && String(a.priority).toLowerCase() === 'high').length} Emergency</Text>
+            <View style={dynamicStyles.statsRow}>
+              <View style={[dynamicStyles.statBadge, { backgroundColor: themeColors.badgeRedBg }]}>
+                <Text style={[dynamicStyles.statText, { color: themeColors.emergencyRed }]}>🔴 {allAlerts.filter((a) => a && a.priority && String(a.priority).toLowerCase() === 'high').length} Emergency</Text>
               </View>
-              <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟡 {allAlerts.filter((a) => a && a.status && String(a.status).toLowerCase() === 'pending').length} Pending</Text>
+              <View style={[dynamicStyles.statBadge, { backgroundColor: themeColors.badgeOrangeBg }]}>
+                <Text style={[dynamicStyles.statText, { color: themeColors.warningOrange }]}>🟡 {allAlerts.filter((a) => a && a.status && String(a.status).toLowerCase() === 'pending').length} Pending</Text>
               </View>
-              <View style={styles.statBadge}>
-                <Text style={styles.statText}>🟢 {allAlerts.filter((a) => {
+              <View style={[dynamicStyles.statBadge, { backgroundColor: themeColors.badgeGreenBg }]}>
+                <Text style={[dynamicStyles.statText, { color: themeColors.successGreen }]}>🟢 {allAlerts.filter((a) => {
                   if (!a || !a.status) return false;
                   const status = String(a.status).toLowerCase();
                   return status === 'completed' || status === 'resolved';
                 }).length} Completed</Text>
               </View>
             </View>
-            <TouchableOpacity style={styles.viewButton}>
-              <Text style={styles.viewButtonText}>VIEW ALL USERS</Text>
+            <TouchableOpacity style={[dynamicStyles.viewButton, { backgroundColor: themeColors.mediumGray }]}>
+              <Text style={[dynamicStyles.viewButtonText, { color: themeColors.white }]}>VIEW ALL USERS</Text>
             </TouchableOpacity>
             <TouchableOpacity 
-              style={styles.broadcastLink}
+              style={dynamicStyles.broadcastLink}
               onPress={() => navigation.navigate('Broadcast')}
             >
-              <Text style={styles.broadcastText}>SEND BROADCAST</Text>
+              <Text style={[dynamicStyles.broadcastText, { color: themeColors.primary }]}>SEND BROADCAST</Text>
             </TouchableOpacity>
           </>
         )}
@@ -728,7 +860,9 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
 const getLeafletMapHTML = (
   center: { lat: number; lng: number },
   geofence: GeofenceArea | null,
-  location: { latitude: number; longitude: number; accuracy?: number } | null
+  location: { latitude: number; longitude: number; accuracy?: number } | null,
+  themeColors: any,
+  effectiveTheme: 'light' | 'dark'
 ) => {
   // Log what we're generating
     // Log what we're generating
@@ -766,6 +900,23 @@ const getLeafletMapHTML = (
     : 'null';
   const userAccuracy = location ? (location.accuracy || 50) : 50; // Default to 50 meters if not available
 
+  // Determine if dark theme
+  const isDark = effectiveTheme === 'dark';
+  
+  // Use dark tile layer for dark theme, light for light theme
+  const tileLayerUrl = isDark 
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  
+  const tileLayerAttribution = isDark
+    ? '© OpenStreetMap contributors © CARTO'
+    : '© OpenStreetMap contributors';
+
+  // Theme colors for map elements
+  const primaryColor = themeColors.primary || '#2563eb';
+  const infoBlue = themeColors.infoBlue || '#3B82F6';
+  const backgroundColor = themeColors.background || (isDark ? '#000000' : '#F8FAFC');
+
   return `
 <!DOCTYPE html>
 <html>
@@ -774,8 +925,16 @@ const getLeafletMapHTML = (
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    body { margin: 0; padding: 0; }
-    #map { width: 100%; height: 100vh; }
+    body { 
+      margin: 0; 
+      padding: 0; 
+      background-color: ${backgroundColor};
+    }
+    #map { 
+      width: 100%; 
+      height: 100vh; 
+      background-color: ${backgroundColor};
+    }
   </style>
 </head>
 <body>
@@ -788,19 +947,21 @@ const getLeafletMapHTML = (
     
     // Initialize map with a reasonable zoom level
     // Zoom level 13 shows good detail without being too close
-    const map = L.map('map').setView(center, 13);
+    const map = L.map('map', {
+      zoomControl: true
+    }).setView(center, 13);
     
-    // Add OpenStreetMap tile layer
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
+    // Add tile layer (dark or light based on theme)
+    L.tileLayer('${tileLayerUrl}', {
+      attribution: '${tileLayerAttribution}',
       maxZoom: 19
     }).addTo(map);
     
     // Add geofence polygon if exists
     if (geofenceCoords && geofenceCoords.length > 0) {
       const geofencePolygon = L.polygon(geofenceCoords, {
-        color: '#2563eb',
-        fillColor: '#2563eb',
+        color: '${primaryColor}',
+        fillColor: '${primaryColor}',
         fillOpacity: 0.2,
         weight: 2
       }).addTo(map);
@@ -840,8 +1001,8 @@ const getLeafletMapHTML = (
       // Add accuracy circle first (so marker appears on top)
       accuracyCircle = L.circle(userLoc, {
         radius: userAccuracy,
-        color: '#3B82F6',
-        fillColor: '#3B82F6',
+        color: '${infoBlue}',
+        fillColor: '${infoBlue}',
         fillOpacity: 0.1,
         weight: 2,
         dashArray: '5, 5'
@@ -890,8 +1051,8 @@ const getLeafletMapHTML = (
         if (!accuracyCircle) {
           accuracyCircle = L.circle(newLocation, {
             radius: accuracyRadius,
-            color: '#3B82F6',
-            fillColor: '#3B82F6',
+            color: '${infoBlue}',
+            fillColor: '${infoBlue}',
             fillOpacity: 0.1,
             weight: 2,
             dashArray: '5, 5'
@@ -922,8 +1083,8 @@ const getLeafletMapHTML = (
         // Create accuracy circle if it doesn't exist
         accuracyCircle = L.circle(newLocation, {
           radius: accuracyRadius,
-          color: '#3B82F6',
-          fillColor: '#3B82F6',
+          color: '${infoBlue}',
+          fillColor: '${infoBlue}',
           fillOpacity: 0.1,
           weight: 2,
           dashArray: '5, 5'

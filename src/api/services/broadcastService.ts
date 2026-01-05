@@ -194,10 +194,12 @@ export const broadcastService = {
     });
 
     // Priority field - backend might expect specific values
-    // Try common choices: 'low', 'medium', 'high' or numeric
-    // Based on error saying "normal" is invalid, using 'high' or 'low'
-    if (payload.priority) {
-      sosPayload.priority = 'high'; // High priority
+    // Map priority level: 'low', 'medium', 'high'
+    // If priorityLevel is provided, use it; otherwise fall back to boolean priority
+    if ((payload as any).priorityLevel) {
+      sosPayload.priority = (payload as any).priorityLevel; // 'low', 'medium', or 'high'
+    } else if (payload.priority) {
+      sosPayload.priority = 'high'; // High priority (for backward compatibility)
     } else {
       sosPayload.priority = 'low'; // Low priority
     }
@@ -259,6 +261,184 @@ export const broadcastService = {
       // Re-throw with more context
       throw new Error(
         `Failed to send broadcast: ${error.response?.data?.message || error.message || 'Unknown error'}`
+      );
+    }
+  },
+
+  updateBroadcast: async (
+    alertId: string,
+    payload: BroadcastAlertPayload & { location_lat?: number; location_long?: number }
+  ) => {
+    // Skip API call if disabled
+    if (!ENABLE_API_CALLS) {
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate network delay
+      return { result: 'success', msg: 'Broadcast updated (mock mode)' };
+    }
+
+    // Get current location if not provided
+    let latitude = payload.location_lat;
+    let longitude = payload.location_long;
+
+    // If location not provided, get current location
+    if (!latitude || !longitude) {
+      try {
+        // Request permission first
+        const hasPermission = await requestLocationPermission();
+        if (!hasPermission) {
+          throw new Error('Location permission denied');
+        }
+
+        // Get current position using callback-based API wrapped in Promise
+        const position = await new Promise<Geolocation.GeoPosition>((resolve, reject) => {
+          try {
+            Geolocation.getCurrentPosition(
+              (pos) => {
+                try {
+                  if (!pos || typeof pos !== 'object') {
+                    reject(new Error('Position object is null, undefined, or not an object'));
+                    return;
+                  }
+                  
+                  const coords = pos?.coords;
+                  if (!coords || typeof coords !== 'object') {
+                    reject(new Error('Position coords property is missing or not an object'));
+                    return;
+                  }
+                  
+                  const lat = coords?.latitude;
+                  const lon = coords?.longitude;
+                  
+                  if (lat === undefined || lon === undefined || typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) {
+                    reject(new Error(`Invalid coordinates: lat=${lat}, lon=${lon}`));
+                    return;
+                  }
+                  
+                  resolve(pos);
+                } catch (validationError: any) {
+                  const errorMsg = validationError?.message || String(validationError) || 'Unknown validation error';
+                  reject(new Error(`Position validation failed: ${errorMsg}`));
+                }
+              },
+              (error) => {
+                const errorCode = error?.code || 'UNKNOWN';
+                const errorMessage = error?.message || 'Location request failed';
+                reject(new Error(`Geolocation error (${errorCode}): ${errorMessage}`));
+              },
+              {
+                enableHighAccuracy: true,
+                timeout: 15000,
+                maximumAge: 10000,
+                showLocationDialog: true,
+                forceRequestLocation: true,
+              }
+            );
+          } catch (apiError: any) {
+            reject(new Error(`Geolocation API error: ${apiError?.message || 'Failed to call getCurrentPosition'}`));
+          }
+        });
+        
+        if (!position || typeof position !== 'object') {
+          throw new Error('Position is null, undefined, or not an object');
+        }
+        
+        const coords = position?.coords;
+        if (!coords || typeof coords !== 'object') {
+          throw new Error('Position.coords is missing or not an object');
+        }
+        
+        const lat = coords?.latitude;
+        const lon = coords?.longitude;
+        
+        if (lat === undefined || lon === undefined || typeof lat !== 'number' || typeof lon !== 'number' || isNaN(lat) || isNaN(lon)) {
+          throw new Error(`Invalid coordinates: lat=${lat}, lon=${lon}`);
+        }
+        
+        latitude = lat;
+        longitude = lon;
+        
+      } catch (error: any) {
+        console.error('Failed to get location for broadcast update:', {
+          error,
+          errorType: typeof error,
+          errorMessage: error?.message,
+          errorCode: error?.code,
+        });
+        
+        let errorMessage = 'Unable to get current location';
+        if (error?.message) {
+          errorMessage = error.message;
+        } else if (error?.code) {
+          errorMessage = `Location error (code: ${error.code})`;
+        }
+        
+        throw new Error(`Location access failed: ${errorMessage}`);
+      }
+    }
+
+    // Map broadcast payload to SOS alert format
+    const alertTypeMapping: Record<string, string> = {
+      'emergency': 'emergency',
+      'general': 'normal',
+      'warning': 'emergency',
+    };
+    
+    const mappedAlertType = alertTypeMapping[payload.alert_type] || 'normal';
+    
+    const sosPayload: any = {
+      message: payload.message,
+      alert_type: mappedAlertType,
+      original_alert_type: payload.alert_type,
+      location_lat: latitude.toString(),
+      location_long: longitude.toString(),
+    };
+    
+    if (payload.geofence_id && payload.geofence_id !== '' && payload.geofence_id !== '0') {
+      if (!isNaN(Number(payload.geofence_id))) {
+        const geofenceIdNum = Number(payload.geofence_id);
+        sosPayload.geofence_id = geofenceIdNum;
+        sosPayload.geofence = geofenceIdNum;
+        sosPayload.geofence_id_str = payload.geofence_id;
+      } else {
+        sosPayload.geofence_id = payload.geofence_id;
+        sosPayload.geofence = payload.geofence_id;
+      }
+    }
+
+    // Map priority level: 'low', 'medium', 'high'
+    // If priorityLevel is provided, use it; otherwise fall back to boolean priority
+    if ((payload as any).priorityLevel) {
+      sosPayload.priority = (payload as any).priorityLevel; // 'low', 'medium', or 'high'
+    } else if (payload.priority) {
+      sosPayload.priority = 'high'; // High priority (for backward compatibility)
+    } else {
+      sosPayload.priority = 'low'; // Low priority
+    }
+
+    console.log('[BroadcastService] Updating alert:', alertId, 'with payload:', JSON.stringify(sosPayload, null, 2));
+    
+    try {
+      // Use PATCH endpoint to update existing alert
+      const endpoint = API_ENDPOINTS.UPDATE_SOS.replace('{id}', alertId);
+      const response = await axiosInstance.patch(endpoint, sosPayload);
+      
+      console.log('[BroadcastService] ✅ SOS alert updated successfully:', {
+        status: response.status,
+        alertId: alertId,
+        response: JSON.stringify(response.data, null, 2),
+      });
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('[BroadcastService] ❌ Failed to update SOS alert:', {
+        error: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        payload: JSON.stringify(sosPayload, null, 2),
+      });
+      
+      throw new Error(
+        `Failed to update broadcast: ${error.response?.data?.message || error.message || 'Unknown error'}`
       );
     }
   },

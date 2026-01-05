@@ -76,6 +76,11 @@ export const AlertsScreen = ({ navigation, route }: any) => {
     }
   };
 
+  const handleUpdate = (alert: Alert) => {
+    // Navigate to BroadcastScreen with alert data for editing
+    navigation.navigate('Broadcast', { alert });
+  };
+
   // Use only real alerts, no sample data
   const displayAlerts = alerts;
   
@@ -97,15 +102,26 @@ export const AlertsScreen = ({ navigation, route }: any) => {
     }).length,
   };
 
-  const filters = [
-    { key: 'all' as const, label: 'All Alerts' },
-    { key: 'emergency' as const, label: 'Emergency' },
-    { key: 'normal' as const, label: 'Accepted' },
-    { key: 'pending' as const, label: 'Pending' },
-    { key: 'completed' as const, label: 'Completed' },
-  ];
+  // Calculate counts for each filter tab based on allAlerts
+  const filterCounts = {
+    all: allAlertsForStats.length,
+    emergency: allAlertsForStats.filter((a) => a && a.priority && String(a.priority).toLowerCase() === 'high').length,
+    normal: allAlertsForStats.filter((a) => a && a.status && String(a.status).toLowerCase() === 'accepted').length,
+    pending: allAlertsForStats.filter((a) => a && a.status && String(a.status).toLowerCase() === 'pending').length,
+    completed: allAlertsForStats.filter((a) => {
+      if (!a || !a.status) return false;
+      const status = String(a.status).toLowerCase();
+      return status === 'completed' || status === 'resolved';
+    }).length,
+  };
 
-  const emergencyCount = displayAlerts.filter((a) => a.priority === 'high').length;
+  const filters = [
+    { key: 'all' as const, label: 'All Alerts', count: filterCounts.all },
+    { key: 'emergency' as const, label: 'Emergency', count: filterCounts.emergency },
+    { key: 'normal' as const, label: 'Accepted', count: filterCounts.normal },
+    { key: 'pending' as const, label: 'Pending', count: filterCounts.pending },
+    { key: 'completed' as const, label: 'Completed', count: filterCounts.completed },
+  ];
 
   // Dynamic styles based on theme
   const dynamicStyles = StyleSheet.create({
@@ -153,6 +169,15 @@ export const AlertsScreen = ({ navigation, route }: any) => {
       color: themeColors.white,
       fontWeight: '600',
     },
+    filterTabCount: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.warningOrange, // Orange color for counts
+      marginTop: 2,
+    },
+    filterTabCountActive: {
+      color: themeColors.white, // White when active
+    },
     list: {
       padding: spacing.md,
       paddingBottom: 100, // Space for FAB and stats
@@ -183,7 +208,6 @@ export const AlertsScreen = ({ navigation, route }: any) => {
         >
           {filters.map((filterItem) => {
             const isActive = filter === filterItem.key;
-            const showBadge = filterItem.key === 'emergency' && emergencyCount > 0;
 
             return (
               <TouchableOpacity
@@ -192,19 +216,24 @@ export const AlertsScreen = ({ navigation, route }: any) => {
                 onPress={() => changeFilter(filterItem.key)}
                 activeOpacity={0.7}
               >
-                <Text
-                  style={[
-                    dynamicStyles.filterTabText,
-                    isActive && dynamicStyles.filterTabTextActive,
-                  ]}
-                >
-                  {filterItem.label}
-                </Text>
-                {showBadge && (
-                  <View style={styles.filterBadge}>
-                    <Text style={styles.filterBadgeText}>{emergencyCount}</Text>
-                  </View>
-                )}
+                <View style={styles.filterTabContent}>
+                  <Text
+                    style={[
+                      dynamicStyles.filterTabText,
+                      isActive && dynamicStyles.filterTabTextActive,
+                    ]}
+                  >
+                    {filterItem.label}
+                  </Text>
+                  <Text
+                    style={[
+                      dynamicStyles.filterTabCount,
+                      isActive && dynamicStyles.filterTabCountActive,
+                    ]}
+                  >
+                    {filterItem.count}
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -215,7 +244,7 @@ export const AlertsScreen = ({ navigation, route }: any) => {
         data={displayAlerts}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <AlertCard alert={item} onRespond={handleRespond} onDelete={handleDelete} onSolve={handleSolve} />
+          <AlertCard alert={item} onRespond={handleRespond} onDelete={handleDelete} onSolve={handleSolve} onUpdate={handleUpdate} />
         )}
         contentContainerStyle={dynamicStyles.list}
         ListEmptyComponent={
@@ -249,17 +278,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
-  filterBadge: {
-    marginLeft: spacing.xs,
-    backgroundColor: colors.emergencyRed, // Keep static for emergency badge
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  filterBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: colors.white,
+  filterTabContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

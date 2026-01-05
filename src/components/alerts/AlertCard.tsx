@@ -11,9 +11,10 @@ interface AlertCardProps {
   onRespond: (alert: Alert) => void;
   onDelete?: (alert: Alert) => void;
   onSolve?: (alert: Alert) => void;
+  onUpdate?: (alert: Alert) => void;
 }
 
-export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete, onSolve }) => {
+export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete, onSolve, onUpdate }) => {
   const { colors: themeColors } = useTheme();
   
   // Check if emergency based on original_alert_type or alert_type
@@ -281,17 +282,31 @@ export const AlertCard: React.FC<AlertCardProps> = ({ alert, onRespond, onDelete
           </View>
         ) : (
           <View style={[styles.bottomButtonsContainer, { borderTopColor: themeColors.border }]}>
-            <TouchableOpacity
-              style={[
-                styles.respondButtonBottom,
-                { backgroundColor: themeColors.primary },
-                isEmergency && [styles.respondButtonBottomEmergency, { backgroundColor: themeColors.emergencyRed }],
-              ]}
-              onPress={() => onRespond(alert)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.respondButtonBottomText, { color: themeColors.white }]}>RESPOND</Text>
-            </TouchableOpacity>
+            {/* Top row: RESPOND and UPDATE buttons */}
+            <View style={styles.topButtonsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.respondButtonBottom,
+                  { backgroundColor: themeColors.primary },
+                  isEmergency && [styles.respondButtonBottomEmergency, { backgroundColor: themeColors.emergencyRed }],
+                ]}
+                onPress={() => onRespond(alert)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.respondButtonBottomText, { color: themeColors.white }]}>RESPOND</Text>
+              </TouchableOpacity>
+              {onUpdate && (
+                <TouchableOpacity
+                  style={[styles.updateButtonBottom, { borderColor: themeColors.primary }]}
+                  onPress={() => onUpdate(alert)}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="edit" size={18} color={themeColors.primary} />
+                  <Text style={[styles.updateButtonText, { color: themeColors.primary }]}>UPDATE</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {/* Bottom row: DELETE button */}
             {onDelete && (
               <TouchableOpacity
                 style={styles.deleteButtonBottom}
@@ -435,11 +450,15 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   bottomButtonsContainer: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 12,
     marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
+  },
+  topButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
   respondButtonBottom: {
     flex: 1,
@@ -457,8 +476,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  deleteButtonBottom: {
+  updateButtonBottom: {
     flex: 1,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    borderWidth: 1,
+    gap: 6,
+  },
+  updateButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  deleteButtonBottom: {
+    width: '100%',
     height: 44,
     borderRadius: 8,
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
