@@ -601,6 +601,15 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       ...typography.buttonLarge,
       color: themeColors.white,
     },
+    viewButtonUserCount: {
+      ...typography.screenHeader,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    viewButtonUserLabel: {
+      ...typography.caption,
+      fontSize: 12,
+    },
     broadcastLink: {
       alignItems: 'center',
     },
@@ -773,7 +782,51 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
       <MapControls
         showZoomControls={false}
         onRecenter={() => {
-          if (webViewRef.current && mapCenter) {
+          if (webViewRef.current && geofence) {
+            // Center map on geofence area
+            if (geofence.coordinates && geofence.coordinates.length > 0) {
+              const geofencePolygon = JSON.stringify(
+                geofence.coordinates.map(c => [c.latitude, c.longitude])
+              );
+              webViewRef.current.injectJavaScript(`
+                if (window.map && typeof window.map.fitBounds === 'function' && typeof L !== 'undefined') {
+                  const geofenceCoords = ${geofencePolygon};
+                  if (geofenceCoords && geofenceCoords.length > 0) {
+                    const bounds = L.latLngBounds(geofenceCoords);
+                    const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+                    const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
+                    
+                    // Expand bounds by 200 meters to show surrounding area
+                    const latOffset = 0.0018; // ~200m
+                    const lngOffset = 0.0018 / Math.cos(centerLat * Math.PI / 180);
+                    
+                    const expandedBounds = L.latLngBounds(
+                      [bounds.getSouth() - latOffset, bounds.getWest() - lngOffset],
+                      [bounds.getNorth() + latOffset, bounds.getEast() + lngOffset]
+                    );
+                    
+                    map.fitBounds(expandedBounds, {
+                      padding: [20, 20],
+                      maxZoom: 15
+                    });
+                    
+                    if (map.getZoom() > 15) {
+                      map.setZoom(15);
+                    }
+                  }
+                }
+              `);
+            } else if (geofence.center) {
+              // Fallback to center coordinates if polygon not available
+              webViewRef.current.injectJavaScript(`
+                if (window.map && typeof window.map.setView === 'function' && window.recenter) {
+                  window.recenter(${geofence.center.latitude}, ${geofence.center.longitude});
+                  map.setZoom(15);
+                }
+              `);
+            }
+          } else if (webViewRef.current && mapCenter) {
+            // Fallback to current map center
             webViewRef.current.injectJavaScript(`
               if (window.map && typeof window.map.fitBounds === 'function' && window.recenter) {
                 window.recenter(${mapCenter.lat}, ${mapCenter.lng});
@@ -802,12 +855,14 @@ export const GeofenceMapScreen = ({ navigation }: any) => {
                 <Text style={dynamicStyles.coverage}>
                   {(geofence.area_size && typeof geofence.area_size === 'number') ? geofence.area_size.toFixed(1) : '0'} km² • {geofence.radius ? (geofence.radius / 1000).toFixed(1) : '1.5'} km radius
                 </Text>
-              </View>
-              <View style={dynamicStyles.infoRight}>
-                <Text style={dynamicStyles.userCount}>
-                  {geofence.active_users_count || 0}
-                </Text>
-                <Text style={dynamicStyles.userLabel}>Users Monitored</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs }}>
+                  <Text style={[dynamicStyles.userCount, { fontSize: 16 }]}>
+                    {geofence.active_users_count || 0}
+                  </Text>
+                  <Text style={dynamicStyles.userLabel}>
+                    Users Monitored
+                  </Text>
+                </View>
               </View>
             </View>
           </>
@@ -958,6 +1013,7 @@ const getLeafletMapHTML = (
     }).addTo(map);
     
     // Add geofence polygon if exists
+    let geofenceCenterMarker = null;
     if (geofenceCoords && geofenceCoords.length > 0) {
       const geofencePolygon = L.polygon(geofenceCoords, {
         color: '${primaryColor}',
@@ -966,7 +1022,7 @@ const getLeafletMapHTML = (
         weight: 2
       }).addTo(map);
       
-      // Expand bounds by 200 meters (approximately 0.0018 degrees) to show surrounding area
+      // Calculate geofence center from bounds
       const bounds = geofencePolygon.getBounds();
       const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
       const centerLng = (bounds.getEast() + bounds.getWest()) / 2;
